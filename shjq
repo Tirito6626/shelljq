@@ -4,6 +4,15 @@
 # Credits: Tirito6626, 2025-2026
 # License: Apache License 2.0
 #
+
+## 
+## 
+## 
+## 
+## 
+## 
+## 
+
 [[ "${_green}" ]] || {
 _green=$'\e[38;5;2m'
 _red=$'\e[38;5;1m'
@@ -13,82 +22,48 @@ _bold=$'\e[1m'
 _gray=$'\e[38;5;240m'
 _nc=$'\e[0m'
 }
+readonly SHELLJQ_VERSION='v1.0.0'
+num_regex='\[(-?[0-9])\]'
+
+readonly shjq_docs="<docs placeholder>"
+readonly shjq_help="
+input can be JSON or a file; if no input provided, shjq tries reading from STDIN with 1 second timeout, and exits if no data to read
+
+informative:
+  --docs                      generate functions documentation based off the executable
+  -h, --help                  print this message
+  -v, --version               print version
+convertion:
+  -A, --to-arr, --to-array    convert JSON into associative array and generate its declaration string
+JSON operations (chained):
+  -rq, -q, --query [query]    perform a JSON query
+  -t, --trim                  trim JSON
+  -a, --append, -s, 
+  --set [key] [value]         modify JSON
+  -r, --remove, -d, 
+  --delete [key]              remove JSON key/element
+modifiers:
+  -p, --pretty                pretty output (enabled by default) 
+  -r, --raw                   print raw output
+  -j, --join [delim?]         join multiple outputs in one line with \$delim
+  -c, --compact               compact output. disables '--pretty'"
+# zsh-specific configuration
 if [[ "$ZSH_VERSION" ]]; then
-	is_zsh=true
-	setopt ksh_arrays
-	emulate bash
+	is_zsh=1
+	emulate ksh
 	int_regex='^[-+]?[0-9]+\.?$'
-	num_regex='\[(-?[0-9])\]'
 	[[ $ZSH_EVAL_CONTEXT =~ :file$ ]] && sourced=true || sourced=false
-	eval "unset_parent() { parent[-1]=(); }; unset_parent_index() { parent[-1]=(); index[-1]=(); };"
+	eval "__unset_parent() { parent[-1]=(); parent_t[-1]=(); }; __unset_parent_index() { parent[-1]=(); parent_t[-1]=(); index[-1]=(); };"
+
 else
 	[[ "${BASH_VERSION[*]}" > "5 2 0" ]] && shopt -u patsub_replacement
 	is_zsh=false
 	int_regex='^-?(0|[1-9][0-9]*)(\.[0-9]+)?([eE][+-]?[0-9]+)?$|^-?\.[0-9]+([eE][+-]?[0-9]+)?$'
-	num_regex='\[(-?[0-9])\]'
 	shopt -s extglob
 	(return 0 2>/dev/null) && sourced=true || sourced=false
-	eval "unset_parent() { unset 'parent[-1]';  }; unset_parent_index() { unset 'parent[-1]' 'index[-1]';  };"
+	eval "__unset_parent() { unset 'parent[-1]' 'parent_t[-1]';  }; __unset_parent_index() { unset 'parent[-1]' 'parent_t[-1]' 'index[-1]';  };"
 fi
 
-function arg_parser {
-	### arg_parser <args> ...
-	## short and long option parser
-	## if an argument starts with `-`, it's parsed as either short or long option
-	## all parsed options are saved as global variables or arrays
-	local arg=''
-	local key="" 
-	local value=""
-	argkey="";
-	#set -x
-	for arg in "$@"; do
-		if [[ "$argkey" ]]; then
-			value="$arg"
-			#declare -n argkey="$argkey"
-			if [[ "${arg::2}" == '--' ]]; then 
-				value=1
-			else
-				case "${arg}" in
-					true|false) bool_to_int value ;;
-				esac
-			fi
-			declare -g "$argkey"
-			local -n argkey="$argkey"
-			[[ "${argkey}" ]] && argkey+=("$value") || argkey="$value"
-			#printf -v "$argkey" "%s" "$arg"
-			unset -n argkey
-			value=""
-		fi
-		#echo "$arg"
-		case "$arg" in
-			--*=*)
-				IFS='=' read key value <<< "$arg"
-				case "$value" in
-					true|false) bool_to_int value ;;
-				esac
-				key="${key##--}"
-				declare -g "$key"
-				local -n key="$key"
-				[[ "${key}" ]] && key+=("$value") || key="$value"
-				unset -n key
-				;;
-			--*)
-				argkey="${arg##--}"
-				;;
-			-[A-z])
-				argkey="${arg##-}"
-				;;
-			-[A-z]*)
-				for ((i=1; i<=${#arg}; i++)); do
-					typeset "${arg:$i:1}=1"
-				done
-			;;
-		esac
-	done
-	[[ "$argkey" ]] && typeset "$argkey=1"
-	#set +x
-	return 0
-}
 
 read_until_v2() {
 	local e line="$2" char='' delim lline="${#2}"
@@ -96,7 +71,7 @@ read_until_v2() {
 		for (( e=0; e<lline; e++ )); do
     		char="${line:$e:1}"
 			chars+="$char"
-			case "$1" in *"$char"*)  break 2 ;; esac
+			case "$1" in '\') ((++e)) ;; *"$char"*)  break 2 ;; esac
 		done
 		return 1
 	done
@@ -104,45 +79,41 @@ read_until_v2() {
 }
 
 read_until() {
-	local e line="$2" char delim
-	for (( e=1; e<${#line}; e++ )); do
+	local e='' line="$2" char='' delim lline="${#2}"
+	for (( e=1; e<lline; e++ )); do
     	char="${line:$e:1}"
-		case "$1" in *"$char"*)  break ;; esac
+		case "$1" in *"$char"*) break ;; *) [[ "$char" == '\' ]] && ((e++)) ;; esac
 	done
 	chars="${line::$e}"
 }
-### is_true <value>
-## returns 0 or 1 depending on the $value (1/true = 0, 0/false = 1, * = 1)
 is_true() case "$1" in
 	true|1) return 0 ;;
 	false|0) return 1 ;;
 	*) return 1 ;;
 esac
-declare -fr is_true
+declare -fr is_true >/dev/null
 
-### bool_to_int <var>
-## convert $var's value into 1 or 0
 bool_to_int() {
 	is_true "${!1:-false}"
 	eval "$1=$(( ! $? ))"
 }
 
-### int_to_bool <var>
-## convert $var's value into literal `true` or `false`
 int_to_bool() case "${!1}" in
 	1|true) eval "$1=true" ;;
 	*) eval "$1=false" ;;
 esac
 
 typecheck() {
-	### typecheck <value> <type?>
-	## supported types:
-	## 1/string, 2/int, 3/bool, 4/null, 5/object, 6/array
-	## if no $type supplied, the value is checked with every type
 	local value="$1" type="$2"
 	case "$type" in
 		1|string) [[ "${value::1}" == '"' && "${value: -1}" == '"' ]]; return ;;
-		2|int) printf "%f" "$value" >/dev/null 2>&1; return ;;
+		2|int) 
+			if (( !is_zsh )); then 
+				printf "%f" "$value" >/dev/null 2>&1 || return
+			else 
+				[[ "$value" -eq "$value" ]] 2>/dev/null || return
+			fi
+			;;
 		3|bool) case "$value" in true|false) return 0 ;; *) return 1 ;; esac ;;
 		4|null) [[ "$value" == null ]]; return ;;
 		5|object)
@@ -193,13 +164,39 @@ error() {
 
 
 json_trim() {
-	### json_trim <input> <validate?> <sub?>
-	## trim JSON
-	## if $validate = true, the input is validated for structure and individual values (slower)
-	## if $sub = true, output is only saved into `json_trim_output` instead of being printed
-	#set +x
-	#trap profiler DEBUG
+	__typecheck() {
+		if [[ "$value" ]] && ! typecheck "$value"; then
+			local __=$(( ${#value} + 10))
+			error "invalid key value \`$value\`"$'\n'"...${1:i-__:$__}..." "$sub"
+			return 1
+		fi
+		value=''
+		return 0
+	}
+	__inside_string() {
+		newstring+='"'
+		if ((is_value)); then
+			value+='"'
+			for (( i=i+1; i < len; i++ )); do
+				char="${input:$i:1}"
+				case "$char" in
+					'\') char="\\${input:$i+1:1}"; ((i++)) ;;
+					'"') ((dquotes++)); isvalue=0 value+="$char" inside_string=0; __typecheck || return; break ;; 
+					$'\n') continue ;;
+        		esac
+		        value+="$char"
+				newstring+="$char"
+			done
+		else
+			for (( i=i+1; i < len; i++ )); do
+				char="${input:$i:1}"
+				case "$char" in '\') char="\\${input:$i+1:1}"; ((i++)) ;; '"') ((dquotes++)); inside_string=0; break ;; $'\n') continue ;; esac
+		        	newstring+="$char"
+				done
+		fi
+	}
   	local inside_string=0
+	local input="$1"
   	json_trim_output=""
 	local len="${#1}"
   	local validate="$2"
@@ -209,90 +206,44 @@ json_trim() {
   	local i=0
   	if ! is_true "${validate:-false}"; then
 		for (( i=0; i<len; i++ )); do
-			char="${1:$i:1}"
-      		if (( escaped )); then
-         		json_trim_output+="$char" && escaped=0
-      		else
-				case "$char" in
-				'\') escaped=1 ;;
+			char="${input:$i:1}"
+			case "$char" in
+				'\') char="\\${input:$i+1:1}"; ((i++)) ;;
 				'"') ((inside_string ^= 1)) ;;
-				' ')  (( inside_string )) && continue ;;
+				' ')  (( ! inside_string )) && continue ;;
 				$'\n') continue ;;
-        		esac
-		        json_trim_output+="$char"
-	    	fi
+        	esac
+		    json_trim_output+="$char"
 	    done
   	else 
     	local newstring=''  newstring='' value='' firstchar='' quoted=false prevchar='' unquotedchars=''
-		local -i i=0 isvalue=0 escaped=0 depth=1 dquotes=0 bdepth=0 commas=0 inside_string=0 code=0 spaces=0
-		char="${1::1}"
-		firstchar="$char"
+		local isvalue=0 escaped=0 depth=1 dquotes=0 bdepth=0 commas=0 inside_string=0 code=0 spaces=0
+		char="${input::1}"
 		prevchar="$char"
 		newstring+="$char"
-	   # set -x
-		for (( i=1; i<len; i++ )); do
-			char="${1:i:1}"
-
-			#set +x
-      		if (( inside_string )); then
-				#set -x
-        		case "$char" in
-		        	'"')  
-						(( escaped )) && continue
-						((inside_string ^= 1, ++dquotes)) 
-		                (( isvalue )) && isvalue=0 && value+='"' 
-						;;
-          			'\') escaped=1
-        		esac
-        		(( isvalue )) && value+="$char"
-			#set +x
-			elif (( escaped )); then
-        		escaped=0
-      		else
-				if (( ! isvalue )); then
-					if ! typecheck "$value"; then
-						local __=$(( ${#value} + 10))
-						error "invalid key value \`$value\`"$'\n'"...${1:i-__:$__}..." "$sub"
-						return 1
-					fi
-        			value=''
-      			fi
-        		case "$char" in 
-          			$'\n') continue ;;
-					' ') spaces+=1; continue ;;
-		          	',')  (( isvalue )) && isvalue=0
-			              [[ "$prevchar" == ',' ]] && error "unexpected ',,'" "$sub"
-        		esac
-        		case "$firstchar" in
-	            	'{'|'[')
-              			case "$char" in 
-                			'"') 	
-								((inside_string ^= 1, ++dquotes))
-                      			(( isvalue )) && value+='"'
-                     			[[ '{[,:' != *"$prevchar"* ]] && ((++commas)) 
-								;;
-                			':') ((! inside_string )) && isvalue=1 ;;
-                			'{') 
-								((++depth))
-                     			isvalue=0
-                     			[[ '"{[,:' != *"$prevchar"* ]] && ((++commas)) 
-								;;
-                			'}') isvalue=0; ((--depth)) ;;
-                			'[') isvalue=1; ((++bdepth)); [[ '"{[,:' != *"$prevchar"* ]] && ((++commas)) ;;
-                			']') isvalue=0; ((--bdepth)) ;;
-                			*) (( isvalue )) && value+="$char" ;;
-              			esac 
-			            ;;
-            		'"') [[ "$char" == '"' ]] && ((depth ^= 1)) ;;
-            		*)   [[  ',]' == *"$char"* ]] && break 
-        		esac
-        		prevchar="$char"
-      		fi
+	   #set -x
+		for (( i=1; i < len; i++ )); do
+			char="${input:$i:1}"
+            case "$char" in 
+                '"') ((++dquotes)); [[ '{[,:' != *"$prevchar"* ]] && ((++commas)); __inside_string ;;
+                ':') isvalue=1 ;;
+                '{')  ((++depth)); isvalue=0; [[ '"{[,:' != *"$prevchar"* ]] && ((++commas)) ;;
+                '}') __typecheck || return; ((--depth)) ;;
+                '[') isvalue=1; ((++bdepth)); [[ '"{[,:' != *"$prevchar"* ]] && ((++commas)) ;;
+                ']') __typecheck || return; ((--bdepth)) ;;
+				$'\n'|' ') continue ;;
+		        ',')
+					[[ "$prevchar" == ',' ]] && error "unexpected ',,'" "$sub"
+					__typecheck || return; 
+					;;
+                *) (( isvalue )) && value+="$char" ;;
+            esac
+        	prevchar="$char"
       		newstring+="$char"
     	done 
-    
-		if (( dquotes % 2 )); then 
-      		if (((dquotes-(dquotes-1)) == 1 && depth > 0 )); then 
+
+		if (( dquotes % 2 )); then
+      		if (( depth > 0 )); then 
         		error 'expected `"` but got EOF instead' "$sub"
         		code=1
         		return 1
@@ -310,8 +261,8 @@ json_trim() {
 			code=1
 		fi
     	[ ! -z "${unquotedchars//\\n}" ] && error "unquoted characters: $unquotedchars" && code=1
+			json_trim_output="$newstring"
   	fi
-	json_trim_output="$newstring"
   	! is_true "${sub:-false}" && echo "$json_trim_output"
   	return "${code}"
 }
@@ -319,7 +270,6 @@ json_trim() {
 nested=0
 
 parse_object() {
-	### parse_object <arr_name> <keys>
     local data=''
 	local keys=($1) key
     [[ "$2" ]] && local parent="$2."
@@ -347,7 +297,7 @@ parse_object() {
 			fi
 		fi
 		value="${value%% }"
-		"$pretty" && \
+		is_true "$pretty" && \
 		case "${value::1}" in 
 			'"')  value="${_green}${value}${_nc}"  ;;
 			'{'|'[') : ;;
@@ -360,7 +310,7 @@ parse_object() {
 						value="${_gray}null${_nc}" 
 						;;
 					*)
-						typecheck "$value" || { 
+						typecheck "$value" int || { 
 							error "invalid key value: $value (while parsing ${parent}${key})"
 							return 1
 						}
@@ -416,7 +366,7 @@ parse_array() {
 						value="${_gray}null${_nc}" 
 						;;
 					*)
-						typecheck "$value" || { 
+						typecheck "$value" int || { 
 							error "invalid key value: $value (while parsing ${parent}${key})"
 							return 1
 						}
@@ -426,22 +376,18 @@ parse_array() {
 		esac
         "$pretty" && data+=$',\n'"${space}${value}" || data+=",${value}"
     done
-    "$pretty" && parsed_array="[${data##,}"$'\n'"${space}]" || parsed_array="[${data##,}]"
+    is_true "$pretty" && parsed_array="[${data##,}"$'\n'"${space}]" || parsed_array="[${data##,}]"
 
 }
 
 arr_to_json() {
-	### arr_to_json <arr_name> <sub?> <pretty?>
-	## convert associative array into JSON
-	## if $sub = true, output is only saved into `arr_to_json_output` instead of being printed
-	## if $pretty = true, additionally appends indentation and value highlight
 	json_to_json_output=''
   	local data=''
 	local arrname="$1"
   	local sub="${2:-false}"
 	local pretty="${3:-false}"
-	"$pretty" && space='  '
-	if is_true "$is_zsh"; then 
+	is_true "$pretty" && space='  '
+	if (( is_zsh )); then 
 		local keys=("${(k)json_to_arr_array[@]}")
 	else
 		[[ "$arrname" != json_to_arr_array ]] && declare -n json_to_arr_array="$arrname"
@@ -450,7 +396,7 @@ arr_to_json() {
 	if [[ "${json_to_arr_array[_shjq_arr]}" == 1 ]]; then
 		unset json_to_arr_array[_shjq_arr]
 		for key in "${keys[@]}"; do
-			[[ "$key" == *'.'* ]] && continue
+			[[ "$key" == *'.'* || "${key: -2}" == "@v" ]] && continue
 			local value="${json_to_arr_array[$key]}"
 			case "${value::3}" in
         		"@A ")
@@ -498,7 +444,7 @@ arr_to_json() {
     	done
 	else
     	for key in "${keys[@]}"; do
-        	[[ "$key" == *'.'* ]] && continue
+        	[[ "$key" == *'.'* || "${key: -2}" == "@v" ]] && continue
     		local value="${json_to_arr_array[$key]}"
         	case "${value::3}" in
         		"@A ")
@@ -507,7 +453,7 @@ arr_to_json() {
 						data+=$',\n'"${space}\"${key}\": ${parsed_object## }" 
 					else
 						parse_object "${value//@A }" "${key}"
-            			data+=",\"$key\": ${parsed_object## }" 
+            			data+=",\"$key\":${parsed_object## }" 
 					fi
 					;;
         		"@a ")
@@ -516,7 +462,7 @@ arr_to_json() {
             			data+=$',\n'"${space}\"${key}\":${parsed_object## }" 
 					else
 						parse_array "${value//@a }" "${key}"
-						data+=",\"$key\": ${parsed_array## }"
+						data+=",\"$key\":${parsed_array## }"
             		fi
 					;;
             	*)
@@ -549,7 +495,7 @@ arr_to_json() {
 								*)	! typecheck "$value" int && value="\"${value}\"" ;;
 						esac
 					fi
-        		"$pretty" && data+=$',\n'"${space}\"$key\": $value" || data+=",\"$key\":$value"
+        		is_true "$pretty" && data+=$',\n'"${space}\"$key\": $value" || data+=",\"$key\":$value"
         	esac
     	done
 		is_true "$pretty" && arr_to_json_output="{${data:1}"$'\n}' || arr_to_json_output="{${data:1}}"
@@ -559,10 +505,6 @@ arr_to_json() {
 }
 
 json_pretty() {
-	### json_pretty <input> <sub?>
-	## returns JSON input with highlight and indentation (pretty-print)
-	## unlike `json_to_arr` with $pretty option, 
-	## if $sub = true, output is only saved into `json_pretty_output` instead of being printed
 	local input="$1"
 	local sub="${2:-false}"
 	local indent="${3:-  }"
@@ -578,17 +520,21 @@ json_pretty() {
             case "$char" in
 				' '|$'\n') continue ;; 
               	',') newstring+=$',\n'"$space"; iskey=1 ;;
-              	'"') read_until '"' "${line:$i}"; (( i=i+${#chars} )); ((iskey == 0 || brackets == 1)) && newstring+="${_green}${chars}\"${_nc}" || newstring+="${_nc}${chars}\"${_nc}" ;;
+              	'"')
+					chars=''
+					read_until '"' "${line:$i}"
+					(( i=i+${#chars} ))
+					((iskey == 0 || brackets == 1)) && newstring+="${_green}${chars}\"${_nc}" || newstring+="${_nc}${chars}\"${_nc}"
+					;;
                 '\') escaped=1 ;;
                 ':') iskey=0; newstring+=': ' ;;
                 '{') 
 					((brackets == 1)) && brackets=2; # set to 2 if it's inside []
 					iskey=1
-					space+='  ' 
+					space+='  '
 					newstring+="$char"$'\n'"$space"
 					;;
 				'}') 
-					((brackets == 2)) && brackets=1 # check if it's inside array and set highlight to prevent resetting string color
 					space=${space:: -2} && newstring+=$'\n'"${space}$char" 
 					;;
 				'[') brackets=1; iskey=0; space+='  ' && newstring+="$char"$'\n'"$space" ;;
@@ -622,8 +568,6 @@ json_pretty() {
 					fi
 					;;
 				*)
-					# highlight all other types with yellow, delimeter is bracket or comma
-					#((++i))
 					read_until ',/{}[]' "${line:$i}"
 					typecheck "$chars" int || { 
 						error "invalid key value: ${chars}"
@@ -643,21 +587,14 @@ json_pretty() {
 }
 
 function profiler {
-	### profiler
-	## used inside bash DEBUG trap, returns the execution time of each operation/command in μs
 	snap="${EPOCHREALTIME//./}"
-	#snap="${snap::-3}"
 	printf "\e[1F%s μs\e[1E        %s\n" "$((snap - snap1))" "$BASH_COMMAND"
 	snap1="$snap"
 }
 
 key_to_arr() {
-	### key_to_arr <key> <arr_name> <raw?> <source_arr?>
-	## build a new array from a key object/array
-	## if $raw = true, it's passed to `json_to_arr`
-	## if $source_arr is supplied, it's used as reference (exclusive to bash runtime) (default is json_to_arr_array)
 	local key="$1" arr_name="$2" raw="${3:-false}" src_arr="$4"
-	! is_true "$is_zsh" && [[ "$src_arr" ]] && declare -n json_to_arr_array="$src_arr"
+	! (( is_zsh )) && [[ "$src_arr" ]] && declare -n json_to_arr_array="$src_arr"
 	if [[ "$key" == *'.'* ]]; then
 		key="${key%%\.}"
 		read parent key <<< "$key"
@@ -679,19 +616,13 @@ key_to_arr() {
 }
 
 json_to_arr() {
-	#trap profiler DEBUG
-	### json_to_arr <input> <arrname?> <prefix?> <raw?>
-	## if $arrname is supplied, it's used as array reference (exclusive to bash runtime) (default is json_to_arr_array)
-	## if $prefix is supplied, it's prepended to each key name
-	## if $raw = true, all key string values are saved without the quoting
-	json_to_arr_output=''
   	local ifs="$IFS"
   	local IFS="."
-  	local parent=() 
+  	local parent=() parent_t=()
 	local json="$1" arrname="$2" prefix="$3" raw="${4:-false}" inside_string=0
-	local line is_array=false parent1 parent_prefix="${prefix}" append_key key value depth result curr_index raw_value chars=''
+	local i line is_array=false parent_prefix="${prefix}" append_key key value depth result curr_index raw_value chars=''
 	
-	if is_true "$is_zsh"; then
+	if (( is_zsh )); then
 		typeset -gA json_to_arr_array=()
 	elif [[ "${arrname}" ]]; then
 		declare -n json_to_arr_array="$arrname"
@@ -699,15 +630,12 @@ json_to_arr() {
 		declare -gA json_to_arr_array=()
 	fi
 	local -ai index
-	#local -a json_keys
   	[[ '{[' == *"${json::1}"* ]] || { error "expected '{' or '[', got '${json::1}' instead"; return 1; }
 	[[ "${json::1}" == '[' ]] && is_array=true && json_to_arr_array["_shjq_arr"]=1 && index=(0)
-
+	json="${json//\\/\\\\}"
 	json="${json//\{\}/%BRACES%}"
 	json="${json//\{/{,}"
 	json="${json//\}/,\}}"
-	#json="${json//\}\]/\},]}"
-	#json="${json//\]\}/],\}}"
   	json="${json//\[\]/%BRACKETS%}"
   	json="${json//\[/[,}"
 	json="${json//\]/,]}"
@@ -716,19 +644,15 @@ json_to_arr() {
 	json="${json//\" :/\":}"
 	json="${json:1:-1}"
 	json="${json%%\}}"
-	if is_true "$is_zsh"; then 
-		IFS=',' read -r -A json_keys <<< "$json,"
+	if (( is_zsh )); then 
+		IFS=',' read -r -A json_keys <<< "$json"
 	else 
 		IFS=',' read -r -a json_keys <<< "${json:1}"
 	fi
-	#unset IFS
 	arr_len="${#json_keys[@]}"
 	for ((i=0; i<=arr_len; i++)); do
-	# line in "${json_keys[@]}"; do
 		line="${json_keys[i]}"
 		[[ "${line::1}" ]] || continue
-		#echo "line: $line"
-		#echo "$inside_string"
 		if (( inside_string )); then
 			chars=''
 			[[ '[]{}' != *"${json_to_arr_array[$append_key]: -1}"* ]] && chars+=','
@@ -737,84 +661,69 @@ json_to_arr() {
 				line="${json_keys[i]}"
 				[[ '[]{}' != *"${chars: -1}"* && '[]{}' != *"${line::1}"* ]] && chars+=','
 			done
-			is_true "$raw" && json_to_arr_array[$append_key]+="${chars::-1}" || json_to_arr_array[$append_key]+="${chars}"
+			is_true "$raw" && eval "json_to_arr_array[$append_key]+=${chars}" || json_to_arr_array[$append_key]+="${chars}"
 			inside_string=0
 			chars=''
 			continue
 		fi
         IFS=':' read key value <<< "${line//: /:}"
-		[[ "${key::1}" ]] || continue
+		[[ "${key::1}" || "$key" == '_shjq_arr' ]] || continue
 		key="${key# }"
 		key="${key%% }"
 		parent_prefix="${prefix:+$prefix.}${parent[*]:+${parent[*]}.}"
-		#echo "$key $value $parent_prefix ${index[@]}"
-		#echo "$key $value"
 		if [ -z "$value" ]; then
 			raw_key="$key"
-			is_true "$raw" && key="${key//\"}"
+			is_true "$raw" && key=$key
 			[[ ${#index[@]} > 0 ]] && curr_index="${index[-1]}"
 			if [[ ${#parent[@]} > 0 ]]; then
 				case "$key" in
 				']')
-                    unset_parent_index;
+                    __unset_parent_index;
 					json_to_arr_array[${parent_prefix%%\.}@v]="${json_to_arr_array[${parent_prefix%%\.}@v]%% }"
 					;;
                 '{')
 					json_to_arr_array[${parent_prefix%%\.}]+=" ${curr_index}"
 					parent+=("${curr_index}")
+					parent_t+=("{")
                     json_to_arr_array[${parent_prefix}${curr_index}]="@A"
 					;;
 				'}')
-                    unset_parent;
-					[[ ${#index[@]} > 0 ]] && ((index[-1]++))
+                    __unset_parent;
+					[[ "${#parent_t[@]}" > 0 && "${parent_t[-1]}" == '[' ]] && ((++index[-1]))
 					;;
 				*)
-					if [[  "${raw_key::1}" == '"' && "${raw_key: -1}" != '"' ]]; then
+					if [[ "${raw_key::1}" == '"' ]] && [[ "${raw_key: -1}" != '"' || "${raw_key: -2}" == '\"' ]]; then
 						append_key="${parent_prefix}${curr_index}"
 						inside_string=1
 					fi
 					json_to_arr_array[${parent_prefix}${curr_index}]="$key"
                     json_to_arr_array[${parent_prefix%%\.}]+=" ${curr_index}"
 					json_to_arr_array[${parent_prefix%%\.}@v]+="'${key}' "
-                   	[[ ${#index[@]} > 0 ]] && ((index[-1]++))
+                   	[[ "${parent_t[-1]:?}" == '[' ]] && ((++index[-1]))
 				esac
             elif [[ "$key" == '{' ]]; then
 					parent+=("${index[-1]}")
+					parent_t+=("{")
 					json_to_arr_array[${parent_prefix}${curr_index}]="@A"
 			else
                 if is_true "$is_array"; then
-					if [[ "$append_key" ]]; then
-						#case "$key" in 
-						#	'['|']'|'{'|'}') json_to_arr_array[$append_key]+="$key" ;;
-						#	*) json_to_arr_array[$append_key]+=",$key" ;;
-						#esac
-						#[[ "${key}" == *'"'* ]] && unset append_key && ((index[-1]++))
-						:
-					elif [[ "${key::1}" == '"' && "${key: -1}" != '"' ]]; then
+					if [[ "${raw_key::1}" == '"' ]] && [[ "${raw_key: -1}" != '"' || "${raw_key: -2}" == '\"' ]]; then
 						json_to_arr_array[${parent_prefix}${curr_index}]="$key"
 						append_key="${parent_prefix}${curr_index}" 
 						inside_string=1
 					else
 						json_to_arr_array[${parent_prefix}${curr_index}]="$key"
-						((index[-1]++))
+						 ((++index[-1])) && echo "${curr_index} ${index[*]} c $key $parent_prefix"
 					fi
-				#else
-					#if [[ "$append_key" ]]; then
-					#	case "$key" in 
-					#		'['|']'|'{'|'}') json_to_arr_array[$append_key]+="$key" ;;
-					#		*) json_to_arr_array[$append_key]+=",$key" ;;
-					#	esac
-					#	[[ "${key}" == *'"'* ]] && unset append_key
-					#fi
 				fi
 				json_to_arr_array[${parent_prefix%%\.}@v]+="'${key%%]}' "
             fi
 			
         else
-			value="${value## }"
-			value="${value%% }"
+			value="${value# }"
+			value="${value% }"
 			raw_value="$value"
-			is_true "$raw" && value="${value//\"}" 
+			is_true "$raw" && eval "value=$value"
             key="${key//\"}"
             case "$value" in
                 '{}'|'[]')  json_to_arr_array[${parent_prefix}${key}]="$value" ;;
@@ -822,10 +731,12 @@ json_to_arr() {
 					json_to_arr_array[${parent_prefix}${key}]="@A"
 					[[ ${#parent[@]} > 0 ]] && json_to_arr_array[${parent_prefix%%\.}]+=" $key"
                     parent+=("$key")
+					parent_t+=('{')
 					;;
 				'[')
 					[[ ${#parent[@]} > 0 ]] && json_to_arr_array[${parent_prefix%%\.}]+=" $key"
                     parent+=("$key")
+					parent_t+=('[')
 					json_to_arr_array[${parent_prefix}${key}]="@a" 
 					index+=(0)
                     ;;
@@ -838,13 +749,13 @@ json_to_arr() {
                     if [[ ${#parent[@]} > 0 ]]; then 
 						json_to_arr_array[${parent_prefix}${key}]="$value"
 						json_to_arr_array[${parent_prefix%%\.}]+=" $key"
-						[[ "${raw_value::1}" == '"' && "${raw_value: -1}" != '"' ]] && append_key="${parent_prefix}${key}" && inside_string=1
+						[[  "${raw_value::1}" == '"' ]] && \
+						[[ "${raw_value: -1}" != '"' || "${raw_value: -2}" == '\"' ]] && append_key="${parent_key}${key}" && inside_string=1
                     else
 						json_to_arr_array[${parent_prefix}${key}]="${value}"
-						#set -x
-						[[  "${raw_value::1}" == '"' && "${raw_value: -1}" != '"' ]] && append_key="${key}" && inside_string=1
+						[[  "${raw_value::1}" == '"' ]] && \
+						[[ "${raw_value: -1}" != '"' || "${raw_value: -2}" == '\"' ]] && append_key="${key}" && inside_string=1
                     fi
-					#set +x
             esac
         fi
     done
@@ -854,10 +765,7 @@ json_to_arr() {
 }
 
 json_query() {
-	### json_query <query(s)> <raw?> <sub?> <input?>
-	## if $raw = true, double quotes are removed from the output (if the output is a string)
-	## if $sub = true, $input is omitted, otherwise $input is used as JSON input and converted into array
-	json_query_output=''
+	json_query_output=()
   	local raw="${2:-false}"
   	local sub="${3:-false}"
   	local result captured1 fullkey=''
@@ -865,13 +773,12 @@ json_query() {
 	if ! is_true "$sub"; then
 		json_to_arr "$4"
 	fi
-	#json_trim "$json"
     if [[ -z "$queries" ]]; then
 		result="${input:-$4}"
 	else
 		for query in "${queries[@]}"; do
 			while [[ "$query" =~ $num_regex ]]; do
-				"$is_zsh" && local captured="${match[0]}" || local captured="${BASH_REMATCH[1]}"
+				(( is_zsh )) && local captured="${match[0]}" || local captured="${BASH_REMATCH[1]}"
 				if [[ "$captured" == -1 ]]; then
 					local parent="${query/\[-1\]*}"
 					captured1="${json_to_arr_array[${parent}]##* }"
@@ -881,31 +788,29 @@ json_query() {
 			local parent="${query%\.*}"
 			local key="${query##${parent}.}" 
 			if [[ "$query" == *'[]'* || "$query" == *","* ]]; then
-				local subkey query_arr=() subkeys_arr=() i=-1 _trash
-				"$is_zsh" && IFS='.' read -A query_arr <<< "$query" || IFS='.' read -a query_arr <<< "$query"
-				query=''
+				multi_output=1
+				local subkey='' query_arr=() subkeys_arr=() i=-1 _trash
+				(( is_zsh )) && IFS='.' read -A query_arr <<< "$query" || IFS='.' read -a query_arr <<< "$query"
 				for key in "${query_arr[@]}"; do
 					if [[ "$key" == *","* ]]; then
-						((++i))
-						query="$key"
-						key="${key//*\[}"
-						query="${query//\[$key}"
-						key="${key//\]}"
-						key="${key// }"
-						key="${key//,/ }"
-						for subkey in ${key}; do
-							[[ "$subkey" == -1 ]] && subkey="${json_to_arr_array[$query]##* }"
-							subkeys_arr[$i]+="${query}.${subkey} "
-						done
+						query="$key" # key[0,1]
+						query="${query//\[/.{}" # key[0,1] -> key.{0,1]
+						query="${query//\]/\}}" # key{0,1] -> key.{0,1}
+						if [[ "$query" == *-1* ]]; then 
+							local last_el="${json_to_arr_array[${query//\.{*}]##* }"
+							query="${query//-1/${last_el}}"
+						fi
+						key="$query"
 					elif [[ "$key" == *'[]'* ]]; then 
-						((++i))
-						key="${fullkey}${key}"
-						key="${key//\[\]}"
-						#echo "${query_arr[*]:$i}"
-						result="${json_to_arr_array[$key]}"
-						for subkey in ${result//@a }; do
-				 			subkeys_arr[$i]+="${key}.${subkey} "
-						done
+						key="${key//\[\]}" # key[] -> key
+						result="${json_to_arr_array[${fullkey}$key]}"
+						if [[ "${result::3}" != "@a " ]]; then
+							error "${fullkey}${key} is not an array"
+							return 1
+						elif ! (( ${#result} >= 2 )); then 
+							continue
+						fi
+						key="${key}.{0..${result##* }}" # key.{0..<last element>}
 					else
 						if [[ ${#subkeys_arr[@]} > 0 ]]; then
 							_trash="${subkeys_arr[$i]}"
@@ -919,26 +824,25 @@ json_query() {
 					fi
 					fullkey+="$key."
 				done
-				result=''
-				for key2 in ${subkeys_arr[$i]}; do
+				fullkey="${fullkey%%.}"
+				eval "printf -v fullkey '%s ' $fullkey"
+				for key2 in $fullkey; do
 					local key2_value="${json_to_arr_array[$key2]}"
 					[[ -z "$key2_value" ]] && continue
-					if [[ "${key2_value::3}" == '@A ' ]]; then
-						parse_object "${key2_value//@A }" "$key2"
-						result+="${parsed_object## }"$'\n'
-					elif [[ "${key2_value::3}" == '@a ' ]]; then
-						parse_array "${key2_value//@a }" "$key2"
-						result+="$parsed_array"$'\n'
-					else 
-						if "$raw"; then
-							key2_value="${key2_value##\"}"
-							result+="${key2_value%%\"}"$'\n'
-						else
-							result+="${key2_value}"$'\n'
-						fi
-					fi
+					case "${key2_value::3}" in
+						'@A ')
+							parse_object "${key2_value//@A }" "$key2"
+							json_query_output+=("${parsed_object## }")
+							;;
+						'@a ')
+							parse_array "${key2_value//@a }" "$key2"
+							json_pretty_output+=("$parsed_array")
+							;;
+						*)
+							is_true "$raw" && eval "key2_value=${key2_value}"
+							json_query_output+=("${key2_value}")
+					esac
 				done
-				[[ "${result: -1}" == $'\n' ]] && result="${result::-1}"
 			else
 				result="${json_to_arr_array[${query}]}"
 				if [[ "${result::3}" == '@A ' ]]; then
@@ -947,55 +851,47 @@ json_query() {
 				elif [[ "${result::3}" == '@a ' ]]; then
 					parse_array "${result//@a }" "$query"
 					result="$parsed_array"
-				else 
-    				if "$raw"; then 
-        				result="${result##\"}"
-        				result="${result%%\"}"
-      				else
-        				result="$result"
-      				fi
+				else
+    				is_true "$raw" && eval "result=$result"
 				fi
+				json_query_output+=("$result")
 			fi
-			json_query_output+="$result"$'\n'
 		done
 	fi
-	json_query_output="${json_query_output::-1}"
 }
 #func3 "$1"
 
 json_set() {
-	### json_set <key> <value> <sub?> <arrname?>
-	## set/append key value to JSON
-	## if $sub = false, modified array is built back into JSON and saved as `json_set_output`
-	## ## if $arrname is supplied, it's used as array reference (exclusive to bash runtime) (default is json_to_arr_array)
 	json_set_output=''
 	local query="$1"
 	local value="$2"
 	local arrname="$4"
 	local sub="${3:-false}"
-	if [[ "${arrname}" ]] && ! is_true "$is_zsh"; then
+	if [[ "${arrname}" ]] && ! (( is_zsh )); then
 		declare -n json_to_arr_array="$arrname"
 	fi
- 	#json_to_arr "$input" json_to_arr_array "" true
-   	#eval "$json_to_arr_output"
-  	[[ "$query" == *"[]"* ]] && query="${query//\[\]}" && local append_arr=true
+
+  	[[ "$query" == *"[]"* ]] && query="${query//\[\]}" && local append_arr=1
 	while [[ "$query" =~ $num_regex ]]; do 
-		"$is_zsh" && query="${query/\[${match[0]}\]/.${match[0]}}" || query="${query/\[${BASH_REMATCH[1]}\]/.${BASH_REMATCH[1]}}"
+		(( is_zsh )) && query="${query/\[${match[0]}\]/.${match[0]}}" || query="${query/\[${BASH_REMATCH[1]}\]/.${BASH_REMATCH[1]}}"
 	done
+
 	local parent="${query%\.*}"
 	local key="${query##${parent}.}"
+
 	typecheck "$value" int || case "$value" in
 		true|false|null) : ;;
 		'{'*|'['*) json_trim "$value" true true; value="$json_trim_output" ;;
 		\"*) : ;;
 		*) value="\"$value\""
-		esac
-	if [[ "$parent" == "$query" || "${json_to_arr_array[$query]}" ]] && [[ -z "$append_arr" ]]; then
+	esac
+
+	if [[ "$parent" == "$query" || "${json_to_arr_array[$query]}" ]] && (( ! append_arr )); then
 		json_to_arr_array[$query]="$value"
 	else
 		case "${json_to_arr_array[$parent]::2}" in
 		"@a")
-			local index="${json_to_arr_array[$parent]: -1}"
+			local index="${json_to_arr_array[$parent]##* }"
 			((index++))
 			json_to_arr_array[$parent]+=" $index"
 			json_to_arr_array[$parent.$index]="$value"
@@ -1020,188 +916,239 @@ json_remove() {
 	local query="$1"
 	local sub="${2:-false}"
  	local result
-	#set -x
-	if ! "$sub"; then
-		json_to_arr "$3"
-	fi
-	#echo "$json_to_arr_output"
-	while [[ "$query" =~ $num_regex ]]; do 
-		"$is_zsh" && query="${query/\[${match[0]}\]/.${match[0]}}" || query="${query/\[${BASH_REMATCH[1]}\]/.${BASH_REMATCH[1]}}"
+	while [[ "$query" =~ $num_regex ]]; do
+		(( is_zsh )) && query="${query/\[${match[0]}\]/.${match[0]}}" || query="${query/\[${BASH_REMATCH[1]}\]/.${BASH_REMATCH[1]}}"
 	done
-	
-	#echo "$parent $key $query" >&2
 	local parent="${query%\.*}"
 	local key="${query##${parent}.}"
-	
-		#declare -p1 json_to_arr_array
+
 	if [[ "${parent}" != "${key}" ]]; then
 		local parent_keys="${json_to_arr_array[${parent}]}"
 		if [[ "${parent_keys::3}" == "@a " ]]; then
 			if [[ "$key" == -1 ]]; then
-				json_to_arr_array[${parent}]="${json_to_arr_array[${parent}]:: -2}"
+				json_to_arr_array[$parent]="${parent_keys% *}"
 			else
 				parent_keys="${parent_keys:3}"
-				local parent_keys_arr=($parent_keys) i
-				#declare -p1 parent_keys_arr
-				json_to_arr_array[${parent}]='@a'
-				for (( i=0; i<${#parent_keys_arr[@]}; i++ )); do
-					json_to_arr_array[${parent}.${i}]="${json_to_arr_array[${parent}.${parent_keys_arr[$i]}]}"
-					json_to_arr_array[${parent}]+=" ${i}"
-				done
+				json_to_arr_array[$parent]="@a ${parent_keys/ ${key}}"
+				
 			fi
 		else
 			unset json_to_arr_array[${query}]
-			json_to_arr_array[${parent}]="${json_to_arr_array[${parent}]/${key}}"
+			json_to_arr_array[$parent]="${json_to_arr_array[${parent}]/${key}}"
 		fi
 	else
 		unset json_to_arr_array[${query}]
 	fi
+
 	if ! is_true "$sub"; then
 		arr_to_json json_to_arr_array true
 		json_remove_output="$arr_to_json_output"
 	fi
 
 }
-help_msg() {
+
+__need_json_arr() {
+	if (( last_change == 1 )); then
+		json_to_arr "${1:-$_result}"
+		last_change=0
+	fi
+}
+
+__need_json() {
+	if (( last_change == 2 )); then
+		arr_to_json json_to_arr_array true
+		_result="$arr_to_json_output"
+		last_change=0
+	fi
+}
+
+
+__help_msg() {
 	{	
 		[[ "$1" ]] && echo "Invalid option: $1"
 		cat << EOF
-${FUNCNAME[1]:-$0} [input] <action> <modifier>
+${FUNCNAME[1]:-$0} [input] [operation] [modifier]
 EOF
+		echo -e "$shjq_help"
 	} >&2
-	return
+	exit "${1:+1}"
 }
 
-gen_docs() {
-	echo "documented functions:"
-	grep "## [^}]" "$0" | while read line; do
-		line="${line## }"
-		case "${line::3}" in
-			"###")
-				echo $'\n\033[1m'"${line:4}"$'\033[0m'
-				;;
-			"##"*)
-				echo "${line:2}"
-		esac
-	done
+
+__ver_msg() {
+echo "shelljq $SHELLJQ_VERSION
+Copyright (C) 2026 Tirito6626
+
+https://github.com/Tirito6626/shelljq"
+}
+__docs() {
+	echo -e "$shjq_docs" | less -R
 }
 
 shjq() {
-	if read -n 1 -t 0.02; then
-		read -r input
-		input="${REPLY}$input"
-	else 
-		if [[ '{[' == *"${1::1}"* ]]; then
-			input="${1}"
+	if [[ -n "$1" && '{[' == *"${1::1}"* ]]; then
+		input="${1}"
+		if (( $# > 1 )); then
 			shift
-		elif [[ -f "$1" ]]; then 
-			read -r -d $'\0' input <"$1"
-			shift
+			local args=("${@}")
 		else
-			case "$1" in
-				docs)
-					gen_docs
-					exit
-				;;
-
-				*)
-				error "no input provided"
-				return
-			esac
+			local args=("-t")
 		fi
+	elif [[ -f "$1" ]]; then
+		read -r -d $'\0' input <"$1";
+		if (( $# > 1 )); then
+			shift
+			local args=("${@}")
+		else
+			local args=("-t")
+		fi
+	else
+		case "$1" in
+			("--docs")
+				__docs
+				return
+				;;
+			("-h"|"--help")
+				__help_msg
+				return 
+				;;
+			("-v"|"--version")
+				__ver_msg
+				return
+				;;
+			*) 
+				if read -r -t 1 input; then
+					while read -r; do
+						input+="$REPLY"
+					done
+					input+="$REPLY"
+				else
+					error "no input provided"
+					__help_msg
+					return 1
+				fi
+		esac
+		local args=("${@}")
 	fi
-	local i raw=false pretty=true join_output=false
-	local args=("${@}")
-	[[ "${args[0]}" ]] || args[0]="-P" 
+	[[ -z "$input" ]] && error "no input provided" && __help_msg && return 1;
+	local i=0 raw=false pretty=false join_output=false last_change=0
 	local actions=()
 	local _result="$input"
-	#echo "${args[@]}"
-		
-	if [[ "${#args[@]}" == 1 ]]; then 
-		case "${args[0]}" in
-			-T|--trim) 
-				json_trim "$input" false true
-				return $?
-				;;
-			-P|--pretty)
-				json_pretty "$input"
-				return $?
-				;;
-		esac
-	fi
-
-	if [[ "${args[0]}" != "-T" ]]; then 
-		json_trim "$input" false true; 
-		_result="$json_trim_output"
-		json_to_arr "$_result"
-	elif [[ "${args[0]}" != "-P" && "${args[0]}" != "--pretty" ]]; then
-		json_to_arr "$_result"
-	fi
-
-
-	#[[ "$index" = 0 ]] && json_to_arr "$input" "${args[$i+1]}" true
-		for ((i=0; i<${#args[@]}; i++)); do
-		case "${args[$i]//\'}" in
-			"-Q"|"--query")
-				local last_act=query
-				json_query "${args[$i+1]}" ${raw} true
-				((++i))
-				if [[ '[{' == *"${json_query_output::1}"* && "$i" < ${#args[@]} ]]; then 
-					json_to_arr "$json_query_output"
-					last_act=else
-				else 
-					_result="$json_query_output"
-				fi
-				#echo "$_result"
-				;;
-			"-T"|"--trim")
-				last_act=trim
-				json_trim "$_result" "${validate}" true
-				[[ $i < ${#args[@]} ]] && _result="$json_trim_output" || json_to_arr "$json_trim_output"
-				;;
-			"-A"|"--append"|"--set")
-				last_act=else
-				json_set "${args[$i+1]}" "${args[$i+2]}" true
-				i=$((i+2))
-				;;
-			"-R"|"--remove"|"--delete")
-				last_act=else
-				json_remove "${args[$i+1]}" true
-				((i++))
-				;;
-			"-F"|"--filter")
-				last_act=filter
-				json_filter "${args[$i+1]}"
-				((i++))
-			;;
-			"-P"|"--pretty")
-				last_act=pretty
-				json_pretty "$_result"
-				_result="$json_pretty_output"
-				;;
-			"-r"|"--raw")
-				raw=true
-				;;
-			"-j"|"--join")
-				join_output=true
-				;;
-			"-c"|"--compact")
-				pretty=false
-				;;
-			*)
-				help_msg "${args[$i]}"
+	case "${args[0]}" in
+		-c|-t|--trim)
+			if [[ "${#args[@]}" == 1 ]]; then
+				json_trim "$input" true || { echo "validation error: $__shjq_error"; return 1; }
 				return
-				;;
+			else
+				json_trim "$input" true true || { echo "validation error: $__shjq_error"; return 1; }
+				last_change=1
+				_result="$json_trim_output"
+				((++i))
+			fi
+			;;
+		-p|--pretty)
+			if [[ "${#args[@]}" == 1 ]]; then
+				json_trim "$input" true true || { echo "validation error: $__shjq_error"; return 1; }
+				json_pretty "$json_trim_output"
+				return $?
+			fi
+			;;
+		-T|--no-trim)
+			json_to_arr "$_result"
+			last_change=0
+			((++i))
+			;;
+		*)
+			json_trim "$input" true true || { echo "validation error: $__shjq_error"; return 1; }
+			_result="$json_trim_output"
+			json_to_arr "$json_trim_output"
+			last_change=0
+			;;
+	esac
+	for ((i=i; i<${#args[@]}; i++)); do
+		local arg="${args[$i]//\'}"
+		[[ -z "$arg" ]] && continue
+		case "$arg" in	
+		("-A"|"--to-arr"|"--to-array")
+			__need_json_arr
+			declare -p json_to_arr_array
+			return
+			;;
+		("-rq"|"-q"|"--query")
+			__need_json_arr
+			[[ "$arg" == "-rq" ]] && raw=true
+			case "${args[$i+2]}" in
+				"-r"|"--raw") raw=true; ;;
+			esac
+			json_query "${args[$i+1]}" "${raw}" true || { echo "query error: $__shjq_error"; return 1; }
+			_result="${json_query_output}"
+			last_change=1
+			((++i))
+			(( multi_output )) && results=("${json_query_output[@]}")
+			;;
+		("-t"|"--trim")
+			__need_json
+			last_act=trim
+			json_trim "$_result" "${validate}" true
+			[[ $i < ${#args[@]} ]] && _result="$json_trim_output" || json_to_arr "$json_trim_output"
+		;;
+		("-a"|"--append"|"-s"|"--set")
+			__need_json_arr
+			json_set "${args[$i+1]}" "${args[$i+2]}" true
+			last_change=2
+			i=$((i+2))
+			;;
+			("-r"|"--remove"|"-d"|"--delete")
+			__need_json_arr
+			json_remove "${args[$i+1]}" true
+			last_change=2
+			((i++))
+			;;
+		("-p"|"--pretty")
+			pretty=true
+			;;
+		("-r"|"--raw")
+			raw=true
+			;;
+		("-j"|"--join")
+			join_output=true
+			[[ "${args[$i+1]}" ]] && delimiter="${args[$i+1]}"
+			((++i))
+			;;
+		("-c"|"--compact")
+			pretty=false
+			;;
+		*)
+			__help_msg "${args[$i]}"
+			return
+			;;
 		esac
 	done
+	__need_json
+	if ((multi_output)); then
+		if is_true "$pretty"; then
+			for ((i=0;i<${#results[@]};i++)); do
+				local result="${results[$i]}"
+				[[ -z "$result" ]] && continue
+				if [[ '{[' == *"${result::1}"* ]]; then
+					json_pretty "$result" true || { echo "validation error: $__shjq_error"; return 1; }
+					results[$i]="${json_pretty_output%%$'\n'}"
+				fi
+			done
+		fi
 
-	[[ "$last_act" == else ]] && arr_to_json json_to_arr_array true && _result="$arr_to_json_output"
-	#if "$pretty"; then
-	#	json_pretty "$result" true
-	#	result="$json_pretty_output"
-	#else
-		"$join_output" && _result="${_result//$'\n'/ }"
-	#fi
-	echo "$_result"
+		if is_true "$join_output"; then
+			IFS="${delimiter:- }" 
+			echo "${results[*]}"
+			unset IFS
+		else
+			printf "%s\n" "${results[@]}"
+		fi
+	elif is_true "$pretty" && [[ '{[' == *"${_result::1}"* ]]; then
+		__need_json
+		json_pretty "$_result" false || { echo "validation error: $__shjq_error"; return 1; }
+	else
+		printf "%s\n" "$_result"
+	fi
 }
-"$sourced" || shjq "$@"
+"$sourced" || { shjq "$@"; exit $?; }
