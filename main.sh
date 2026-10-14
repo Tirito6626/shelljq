@@ -674,15 +674,16 @@ key_to_arr() {
 
 json_to_arr() {
 	#trap profiler DEBUG
-	### json_to_arr <input> <arrname?> <prefix?> <raw?> <return?> -> json_to_arr_array[] | <name>[]
+	### json_to_arr <input> <arrname?> <prefix?> <raw?> <return?> -> json_to_arr_array[] | <name>[] | json_to_arr_output
 	## if $arrname is supplied, it's used as array reference (exclusive to bash runtime) (default is json_to_arr_array)
 	## if $prefix is supplied, it's prepended to each key name
 	## if $raw = true, all key string values are saved without the quoting
-	#json_to_arr_output=''
+	## if $return = true, declaration string of generated array is saved in `json_to_arr_output`
+	json_to_arr_output=''
   	local ifs="$IFS"
   	local IFS="."
   	local parent=() parent_t=()
-	local json="$1" arrname="$2" prefix="$3" raw="${4:-false}" inside_string=0
+	local json="$1" arrname="$2" prefix="$3" raw="${4:-false}" return="${5:-false}" inside_string=0
 	local i line is_array=false parent_prefix="${prefix}" append_key key value depth result curr_index raw_value chars=''
 	
 	if (( is_zsh )); then
@@ -838,6 +839,10 @@ json_to_arr() {
     done
 	unset IFS
     IFS="$ifs"
+	if is_true "$return"; then
+		json_to_arr_output=$(declare -p json_to_arr_array)
+		[[ "$arrname" ]] && json_to_arr_output="${json_to_arr_output/json_to_arr_array/$arrname}"
+	fi
 	return 0
 }
 

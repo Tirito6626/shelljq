@@ -17,12 +17,12 @@ bash 4.3+/zsh JSON processor
 "
 
 #echo "${input/<docs placeholder>/$docs}"
-if [[ -z "$1" ]]; then
+if [[ "$1" ]]; then
     while read line; do
 	    line="${line## }"
 	    case "${line::3}" in
 		    "###")
-			    output+=$'\n'"\\n\\\\033[1m${line:4}\\\\033[0m"$'\n'
+			    output+="\\n\\\\033[1m${line:4}\\\\033[0m"$'\n'
 			    ;;
 		    "## ")
 		    	output+="${line:2}"$'\n'
@@ -30,6 +30,7 @@ if [[ -z "$1" ]]; then
     done <"${path1:-$path}"
     #input="$(cat "$path")"
     output="${output//$/\\$}"
+    output="${out//\"/\\\"}"
     output="${output//\`/\\\`}"
     echo "${input//<docs placeholder>/${output//$/\\$}}" > "$path"
 else
