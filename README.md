@@ -83,10 +83,11 @@ build a new array from a key object/array
 if $raw = true, it's passed to `json_to_arr`
 if $source_arr is supplied, it's used as reference (exclusive to bash runtime) (default is json_to_arr_array)
 
-# json_to_arr `input` `arrname?` `prefix?` `raw?` `return?` -> json_to_arr_array[] | `name`[]
+# json_to_arr `input` `arrname?` `prefix?` `raw?` `return?` -> json_to_arr_array[] | `name`[] | json_to_arr_output
 if $arrname is supplied, it's used as array reference (exclusive to bash runtime) (default is json_to_arr_array)
 if $prefix is supplied, it's prepended to each key name
 if $raw = true, all key string values are saved without the quoting
+if $return = true, declaration string of generated array is saved in `json_to_arr_output`
 
 # json_query `query(s)` `raw?` `sub?` -> json_query_output[]
 perform JSON query

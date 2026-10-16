@@ -1,18 +1,20 @@
 path="$(dirname "$0")"
 path="${path//$0}/../shjq"
-if [[ ! -f "$path" ]]; then
-    path1="${path/shjq/main.sh}"
+path1="${path/shjq/main.sh}"
+if [[ -f "$path" ]]; then
     if [[ ! -f "$path1" ]]; then 
         echo "$path and $path1 missing" >&2
         exit 1
     fi
+    rm "$path"
+    #path="$path1"
     if [[ "$1" == 3 ]]; then
         input=$(grep -v -e '	#' -e '###' -e '## [^}]' -e '^##$' -e '#- ' "$path1")
     else
         input=$(grep -v '#- ' "$path1")
     fi
 else
-    input=$(grep -v '#- ' "$path")
+    input=$(grep -v '#- ' "$path1")
 fi
 
 output=$(awk '/##\- / {
