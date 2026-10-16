@@ -106,7 +106,7 @@ read_until_v2() {
 		for (( e=0; e<lline; e++ )); do
     		char="${line:$e:1}"
 			chars+="$char"
-			case "$1" in '\') ((++e)) ;; *"$char"*)  break 2 ;; esac
+			case "$1" in *"$char"*) break 2 ;; *) [[ "$char" == '\' ]] && ((++e)) && chars+="${line:$e:1}" ;; esac
 		done
 		return 1
 	done
@@ -137,9 +137,19 @@ typecheck() {
 	## 1/string, 2/int, 3/bool, 4/null, 5/object, 6/array
 	## if no $type supplied, the value is checked with every type
 	local value="$1" type="$2"
+	#set +x
 	case "$type" in
-		1|string) [[ "${value::1}" == '"' && "${value: -1}" == '"' ]]; return ;;
-		2|int) 
+		1|string)
+			#set -x
+			local chars=''
+			[[ "${value::1}" != '"' ]] && return 1
+			value="${value:1}"
+			read_until_v2 '"' "$value" || return 1
+			(( "${#value}" == "${#chars}" )) || return 1
+			return 0
+			#set +x
+			;;
+		2|int)
 			if (( ! is_zsh )); then 
 				printf "%f" "$value" >/dev/null 2>&1 || return
 			else 
@@ -164,7 +174,8 @@ typecheck() {
 			;;
 		*)
 			case "$value" in
-          		true|false|null|'"'*'"'|''|-?[0-9]+) return 0 ;;
+				'"'*) typecheck "$value" 1; return ;;
+          		true|false|null|''|-?[0-9]+) return 0 ;;
           		'{'*|'['*) json_trim "$value" true true; return ;;
 				*)
 					typecheck "$value" 2 || \
@@ -262,7 +273,7 @@ json_trim() {
 			esac
 		fi
     	local newstring=''  newstring='' value='' firstchar='' quoted=false prevchar='' unquotedchars=''
-		local isvalue=0 colons=0 escaped=0 depth=1 dquotes=0 bdepth=0 commas=0 inside_string=0 code=0 spaces=0
+		local isvalue=0 colons=0 colons_needed=0 depth=1 dquotes=0 bdepth=0 commas=0 inside_string=0 code=0 spaces=0
 		char="${input::1}"
 		prevchar="$char"
 		newstring+="$char"
@@ -272,7 +283,7 @@ json_trim() {
             case "$char" in
                 '"') ((++dquotes)); [[ '{[,:' != *"$prevchar"* ]] && __missing_comma; __inside_string ;;
                 ':') ((++colons)); isvalue=1 ;;
-                '{')  ((++depth)); isvalue=0; [[ '"[,:' != *"$prevchar"* ]] && __missing_comma ;;
+                '{') ((++depth)); isvalue=0; [[ '"[,:' != *"$prevchar"* ]] && __missing_comma ;;
                 '}') __typecheck || return; ((--depth)) ;;
                 '[') isvalue=1; ((++bdepth)); [[ '"[,:' != *"$prevchar"* ]] && __missing_comma ;;
                 ']') __typecheck || return; ((--bdepth)) ;;
@@ -299,7 +310,7 @@ json_trim() {
 	      	fi
 		else
 			[[ "${newstring::1}" != '[' ]] && (( colons == 0 )) && error "at least one key and value required" && code=1
-    	fi
+		fi
 		if (( depth+bdepth != 0 )); then
     		(( depth > 0 )) && error "missing ${depth} \`}\`" 
     		(( depth < 0 )) && error "missing ${depth//\-} \`$firstchar\`"
@@ -390,9 +401,8 @@ parse_array() {
 				value="$parsed_object"
 		fi
 		value="${value%% }"
-		json_to_arr_array[${parent}@v]+="'$value' "
 		case "${value::1}" in 
-			'"')  value="${_green}${value}${_nc}"  ;;
+			'"')  value="${_green}${value//\"/\\\"}${_nc}"  ;;
 			'{'|'[') : ;;
 			*)
 				case "$value" in
@@ -422,8 +432,7 @@ parse_array() {
 					value="$parsed_object"
 			fi
 			value="${value%% }"
-			json_to_arr_array[${parent}@v]+="'$value' "
-			typecheck "$value" || value="\"$value\""
+			typecheck "$value" || value="\"${value//\"/\\\"}\""
 			data+=",${value}"
 		done
     	parsed_array="[${data##,}]"
@@ -442,7 +451,6 @@ arr_to_json() {
 	local pretty="${3:-false}"
 	is_true "$pretty" && space='  '
 	if (( is_zsh )); then
-		echo "${${(P)arrname}[@]}"
 		[[ "$arrname" != json_to_arr_array ]] && typeset -gA json_to_arr_array=("${(kv)${(P)arrname}[@]}")
 		local keys=("${(k)json_to_arr_array[@]}")
 	else
@@ -453,7 +461,7 @@ arr_to_json() {
 	if [[ "${json_to_arr_array[_shjq_arr]}" == 1 ]]; then
 		unset json_to_arr_array[_shjq_arr]
 		for key in "${keys[@]}"; do
-			[[ "$key" == *'.'* || "${key: -2}" == "@v" ]] && continue
+			[[ "$key" == *'.'* ]] && continue
 			local value="${json_to_arr_array[$key]//\\/\\\\}"
 			case "${value::3}" in
         		"@A ")
@@ -479,7 +487,7 @@ arr_to_json() {
 										if typecheck "$value" int; then 
 											value="${_yellow}${value}${_nc}"
 										else
-											value="${_green}\"${value}\"${_nc}"
+											value="${_green}\"${value//\"/\\\"}\"${_nc}"
 										fi
 										;;
 								esac
@@ -494,7 +502,7 @@ arr_to_json() {
 								| '['*']'  \
 								| '"'*'"') : ;;
 								'')  value='""'  ;;
-								*)	typecheck "$value" int || value="\"${value}\"" ;;
+								*)	typecheck "$value" int || value="\"${value//\"/\\\"}\"" ;;
 						esac
 						set +x
 		        		data+=",${value}"
@@ -504,8 +512,8 @@ arr_to_json() {
     	done
 	else
     	for key in "${keys[@]}"; do
-        	[[ "$key" == *'.'* || "${key: -2}" == "@v" ]] && continue
-			local value="${json_to_arr_array[$key]//\\/\\\\}"
+        	[[ "$key" == *'.'* ]] && continue
+			local value="${json_to_arr_array[$key]}"
         	case "${value::3}" in
         		"@A ")
                 	if is_true "$pretty"; then
@@ -778,7 +786,6 @@ json_to_arr() {
 				case "$key" in
 				']')
                     __unset_parent_index;
-					json_to_arr_array[${parent_prefix%%\.}@v]="${json_to_arr_array[${parent_prefix%%\.}@v]%% }"
 					;;
                 '{')
 					json_to_arr_array[${parent_prefix%%\.}]+=" ${curr_index}"
@@ -797,7 +804,6 @@ json_to_arr() {
 					fi
 					json_to_arr_array[${parent_prefix}${curr_index}]="$key"
                     json_to_arr_array[${parent_prefix%%\.}]+=" ${curr_index}"
-					json_to_arr_array[${parent_prefix%%\.}@v]+="'${key}' "
                    	[[ "${parent_t[-1]:?}" == '[' ]] && ((++index[-1]))
 				esac
             elif [[ "$key" == '{' ]]; then
@@ -815,7 +821,6 @@ json_to_arr() {
 						 ((++index[-1])) && echo "${curr_index} ${index[*]} c $key $parent_prefix"
 					fi
 				fi
-				json_to_arr_array[${parent_prefix%%\.}@v]+="'${key%%]}' "
             fi
 			
         else
