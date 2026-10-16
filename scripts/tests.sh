@@ -30,12 +30,15 @@ fi
 declare -gA test_array=(
     [foo]="bar \" baz"
     [key]="@A key1 key2 key3"
+    [key2]="[{\"foo\":\"bar\"}]"
     [key.key1]="string test"
     [key.key2]=35.2
-    [key.key3]="@a 0 1 2"
+    [key.key3]="@a 0 1 2 3"
     [key.key3.0]="another string"
     [key.key3.1]="\"foo \\\"bar\""
     [key.key3.2]=null
+    [key.key3.3]="@A foo"
+    [key.key3.3.foo]="bar"
 )
 
 #long_input="$(cat "$dir/test.json")"
@@ -46,6 +49,7 @@ test_strings=(
         "foo": "bar"
     }'
     '{ "foo": "bar baz" }'
+    '[{ "foo": "bar baz" }]'
     '{ "foo": "bar\"baz" }'
     "$(cat "$dir/test.json")"
 )
@@ -54,9 +58,10 @@ test_outputs=(
     '{"foo":"bar"}'
     '{"foo":"bar"}'
     '{"foo":"bar baz"}'
+    '[{"foo":"bar baz"}]'
     '{"foo":"bar\"baz"}'
     '{"component":{"type":17,"accent_color":16777215,"spoiler":false,"components":[{"type":9,"accessory":{"type":11,"media":{"url":"https://tirito.de/assets/kcalb.webp","proxy_url":"https://tirito.de/assets/kcalb.webp"},"description":null,"spoiler":false},"components":[{"type":10,"content":"## grand _tirito_'\''s portfolio"}]},{"type":1,"components":[{"type":2,"style":5,"label":"Fiction","emoji":null,"disabled":false,"url":"https://github.com/FictionWeb/framework"},{"type":2,"style":5,"label":"Amber","emoji":null,"disabled":false,"url":"https://amber-lang.com"},{"type":2,"style":5,"label":"Wispbyte","emoji":null,"disabled":false,"url":"https://wispbyte.com"},{"type":2,"style":5,"label":"all projects","emoji":null,"disabled":false,"url":"https://github.com/Tirito6626"}]},"tets\"\", fine okl"]},"hello":"1 2 3"}'
-    '{"foo":"bar \" baz","key":{"key1":"string test","key2":35.2,"key3":["another string","foo \"bar",null]}}'
+    '{"foo":"bar \" baz","key":{"key1":"string test","key2":35.2,"key3":["another string","foo \"bar",null,{"foo":"bar"}]},"key2":[{"foo":"bar"}]}'
 )
 
 #long_output='{"component":{"type":17,"accent_color":16777215,"spoiler":false,"components":[{"type":9,"accessory":{"type":11,"media":{"url":"https://tirito.de/assets/kcalb.webp","proxy_url":"https://tirito.de/assets/kcalb.webp"},"description":null,"spoiler":false},"components":[{"type":10,"content":"## grand _tirito_'\''s portfolio"}]},{"type":1,"components":[{"type":2,"style":5,"label":"Fiction","emoji":null,"disabled":false,"url":"https://github.com/FictionWeb/framework"},{"type":2,"style":5,"label":"Amber","emoji":null,"disabled":false,"url":"https://amber-lang.com"},{"type":2,"style":5,"label":"Wispbyte","emoji":null,"disabled":false,"url":"https://wispbyte.com"},{"type":2,"style":5,"label":"all projects","emoji":null,"disabled":false,"url":"https://github.com/Tirito6626"}]},"tets\"\", fine okl"]},"hello":"1 2 3"}'
@@ -118,7 +123,7 @@ assert() {
     expand_or_string "$2" right
     if [[ "$left" != "$right" ]]; then
         echo "assertion failed: $1 == $2"
-        git diff --minimal --no-index --word-diff=color --word-diff-regex=. <(echo "$left") <(echo "$right") | sed -e 's/diff --git.*//' -e 's/---.*/'"${_red}${1//\\/\\\\}${_nc}"'/' -e 's/+++.*/'"${_green}${2//\\/\\\\}${_nc}"'/'
+        git diff --minimal --no-index --word-diff=color --word-diff-regex=. <(echo "$left") <(echo "$right")
         return 1
     else
         (( with_log )) && echo "${_gray}+ assertion $1 == $2 ${_green}✓${_nc}"
@@ -173,7 +178,8 @@ test typecheck true bool
 test typecheck '{ "foo": "bar" }' object
 test typecheck '{}' object
 test typecheck '[1, 2, 3]' array
-test typechecl '[]' array
+test typecheck '[{ "foo": "bar" }]' array
+test typecheck '[]' array
 
 !test typecheck 'test' string
 !test typecheck '"test' string
@@ -197,4 +203,12 @@ done
 # arr_to_json
 test arr_to_json test_array true
 with_log=1 assert "arr_to_json_output" "${test_outputs[-1]}"
+
+# key_to_arr
+declare -A output_arr
+sub=1 test key_to_arr key output_arr true test_array
+declare -p output_arr
+sub=1 !test key_to_arr key "" true
+
+
 _end

@@ -186,7 +186,8 @@ kv_to_object() {
 }
 
 error() {
-  is_true "${sub:-$2}" && __shjq_error="$1" || printf '%s\n' "error: $1" >&2
+  	is_true "${sub:-$2}" && __shjq_error="$1" || printf '%s\n' "error: $1" >&2
+	return 0
 }
 
 
@@ -442,7 +443,6 @@ arr_to_json() {
 	is_true "$pretty" && space='  '
 	if (( is_zsh )); then
 		echo "${${(P)arrname}[@]}"
-		#declare -p "$arrname"
 		[[ "$arrname" != json_to_arr_array ]] && typeset -gA json_to_arr_array=("${(kv)${(P)arrname}[@]}")
 		local keys=("${(k)json_to_arr_array[@]}")
 	else
@@ -547,11 +547,9 @@ arr_to_json() {
 						data+=$',\n'"${space}\"$key\": $value"
 					else
 						case "$value" in
-								true|false \
-								| null     \
-								| '{'*'}'  \
-								| '['.*']'  \
-								| '"'*'"') : ;;
+								true|false|null) : ;;
+								'{'*) typecheck "$value" object || return ;;
+								'['*) typecheck "$value" array ||  return ;;
 								'')  value='""'  ;;
 								*) typecheck "$value" int || value="\"${value//\"/\\\"}\"" ;;
 						esac
@@ -666,10 +664,18 @@ function profiler {
 key_to_arr() {
 	### key_to_arr <key> <arr_name> <raw?> <source_arr?> -> json_to_arr_array[] | <name>[]
 	## build a new array from a key object/array
-	## if $raw = true, it's passed to `json_to_arr`
-	## if $source_arr is supplied, it's used as reference (exclusive to bash runtime) (default is json_to_arr_array)
-	local key="$1" arr_name="$2" raw="${3:-false}" src_arr="$4"
-	! (( is_zsh )) && [[ "$src_arr" ]] && declare -n json_to_arr_array="$src_arr"
+	## $raw is passed to `json_to_arr`
+	## if $source_arr is supplied, it's used as reference (default is json_to_arr_array)
+	#set -x
+	local key="$1" arrname="$2" raw="${3:-false}" src_arr="${4:-json_to_arr_array}"
+	if (( is_zsh )); then
+		#echo "${${(P)arrname}[@]}"
+		[[ -z "${(Pk)arrname}" ]] && error "invalid or empty array" && return 1
+		[[ "$arrname" != json_to_arr_array ]] && typeset -gA json_to_arr_array=("${(kv)${(P)arrname}[@]}")
+	else
+		[[ "$src_arr" != json_to_arr_array ]] && declare -n json_to_arr_array="$src_arr"
+		[[ -z "${json_to_arr_array[*]}" ]] && error "invalid or empty array" && return 1
+	fi
 	if [[ "$key" == *'.'* ]]; then
 		key="${key%%\.}"
 		read parent key <<< "$key"
@@ -678,12 +684,12 @@ key_to_arr() {
 		'@a')
 			parse_array "$key" "$parent"
 			parsed_array="${parsed_array//\"$key\":\[}"
-			json_to_arr "${parsed_array::-1}" "$arr_name"
+			json_to_arr "${parsed_array::-1}" "$arrname" '' "$raw"
 			;;
 		'@A')
 			parse_object "$key" "$parent"
 			parsed_object="${parsed_object//\"$key\":\{}"
-			json_to_arr "${parsed_object::-1}" "$arr_name"
+			json_to_arr "${parsed_object::-1}" "$arrname" '' "$raw"
 			;;
 		'') return 1 ;;
 	esac
@@ -766,7 +772,7 @@ json_to_arr() {
 		#echo "$key $value"
 		if [ -z "$value" ]; then
 			raw_key="$key"
-			is_true "$raw" && key=$key
+			is_true "$raw" && eval "key=$key"
 			[[ ${#index[@]} > 0 ]] && curr_index="${index[-1]}"
 			if [[ ${#parent[@]} > 0 ]]; then
 				case "$key" in
