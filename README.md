@@ -44,16 +44,22 @@ follows similar to JQ(1)'s basic query syntax without the leading dot
 - arr[1,2].key
 - arr[-1,2].key -> -1 resolves to `arr`s last index
 
-# FUNCTIONS
-
-# is_true `value` -> $? (0 | 1)
-returns 0 or 1 depending on the $value (1/true = 0, 0/false = 1, * = 1)
-
 # bool_to_int `var`
 convert $var's value into 1 or 0
 
 # int_to_bool `var`
 convert $var's value into literal `true` or `false`
+
+# FUNCTIONS
+
+# is_true `value` -> $? (0 | 1)
+returns 0 or 1 depending on the $value (1/true = 0, 0/false = 1, * = 1)
+
+# sanitize_string `string` -> sanitized_string
+sanitize $string to be a valid string value
+
+# unwrap_string `string` -> raw_string
+unquote $string and remove backslashes
 
 # typecheck `value` `type?` -> $? (0 | 1)
 supported types:
@@ -80,8 +86,8 @@ used inside bash DEBUG trap, returns the execution time of each operation/comman
 
 # key_to_arr `key` `arr_name` `raw?` `source_arr?` -> json_to_arr_array[] | `name`[]
 build a new array from a key object/array
-if $raw = true, it's passed to `json_to_arr`
-if $source_arr is supplied, it's used as reference (exclusive to bash runtime) (default is json_to_arr_array)
+$raw is passed to `json_to_arr`
+if $source_arr is supplied, it's used as reference (default is json_to_arr_array)
 
 # json_to_arr `input` `arrname?` `prefix?` `raw?` `return?` -> json_to_arr_array[] | `name`[] | json_to_arr_output
 if $arrname is supplied, it's used as array reference (exclusive to bash runtime) (default is json_to_arr_array)

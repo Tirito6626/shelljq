@@ -130,6 +130,24 @@ is_true() case "$1" in
 esac
 declare -fr is_true >/dev/null 2>&1
 
+sanitize_string() {
+	### sanitize_string <string> -> sanitized_string
+	## sanitize $string to be a valid string value
+	local string="$1"
+	string="${string//\\/\\\\}"
+	string="${string//\"/\\\"}"
+	string="${string//\`/\\\`}"
+	sanitized_string="\"$string\""
+}
+
+unwrap_string() {
+	### unwrap_string <string> -> raw_string
+	## unquote $string and remove backslashes
+	local string="$1"
+	string="${string#\"}"
+	string="${string%\"}"
+	raw_string="${string//\\}"
+}
 
 typecheck() {
 	### typecheck <value> <type?> -> $? (0 | 1)
@@ -487,7 +505,8 @@ arr_to_json() {
 										if typecheck "$value" int; then 
 											value="${_yellow}${value}${_nc}"
 										else
-											value="${_green}\"${value//\"/\\\"}\"${_nc}"
+											sanitize_string "$value"; value="$sanitized_string"
+											value="${_green}$value${_nc}"
 										fi
 										;;
 								esac
@@ -502,7 +521,7 @@ arr_to_json() {
 								| '['*']'  \
 								| '"'*'"') : ;;
 								'')  value='""'  ;;
-								*)	typecheck "$value" int || value="\"${value//\"/\\\"}\"" ;;
+								*)	typecheck "$value" int || { sanitize_string "$value"; value="$sanitized_string"; } ;;
 						esac
 						set +x
 		        		data+=",${value}"
@@ -547,7 +566,8 @@ arr_to_json() {
 									if typecheck "$value" int; then 
 										value="${_yellow}${value}${_nc}"
 									else
-										value="${_green}\"${value//\"/\\\"}\"${_nc}"
+										sanitize_string "$value"; value="$sanitized_string"
+										value="${_green}$value${_nc}"
 									fi
 									;;
 							esac
@@ -559,7 +579,7 @@ arr_to_json() {
 								'{'*) typecheck "$value" object || return ;;
 								'['*) typecheck "$value" array ||  return ;;
 								'')  value='""'  ;;
-								*) typecheck "$value" int || value="\"${value//\"/\\\"}\"" ;;
+								*) typecheck "$value" int || { sanitize_string "$value"; value="$sanitized_string"; } ;;
 						esac
 						data+=",\"$key\":$value"
 					fi
@@ -780,7 +800,7 @@ json_to_arr() {
 		#echo "$key $value"
 		if [ -z "$value" ]; then
 			raw_key="$key"
-			is_true "$raw" && eval "key=$key"
+			is_true "$raw" && unwrap_string "$key" && key="$raw_string"
 			[[ ${#index[@]} > 0 ]] && curr_index="${index[-1]}"
 			if [[ ${#parent[@]} > 0 ]]; then
 				case "$key" in
@@ -828,7 +848,7 @@ json_to_arr() {
 			value="${value# }"
 			value="${value% }"
 			raw_value="$value"
-			is_true "$raw" && eval "value=$value"
+			is_true "$raw" && unwrap_string "$value" && value="$raw_string"
             key="${key//\"}"
             case "$value" in
                 '{}'|'[]')  json_to_arr_array[${parent_prefix}${key}]="$value" ;;
@@ -966,7 +986,7 @@ json_query() {
 							;;
 						*)
 						#echo "$key2_value"
-							is_true "$raw" && eval "key2_value=${key2_value}"
+							is_true "$raw" && unwrap_string "$key2_value" && key2_value="$unwrapped_string"
 							json_query_output+=("${key2_value}")
 					esac
 				done
@@ -981,7 +1001,7 @@ json_query() {
 					parse_array "${result//@a }" "$query"
 					result="$parsed_array"
 				else
-    				is_true "$raw" && eval "result=$result"
+    				is_true "$raw" && unwrap_string "$result" && result="$unwrapped_string"
 				fi
 				json_query_output+=("$result")
 			fi
@@ -1015,13 +1035,11 @@ json_set() {
 	local parent="${query%\.*}"
 	local key="${query##${parent}.}"
 
-	typecheck "$value" int || case "$value" in
-		true|false|null) : ;;
-		'{'*|'['*) json_trim "$value" true true; value="$json_trim_output" ;;
-		\"*) : ;;
-		*) value="\"$value\""
-	esac
-
+	if ! typecheck "$value"; then
+		sanitize_string "$value"
+		value="$sanitized_string"
+	fi
+	
 	if [[ "$parent" == "$query" || "${json_to_arr_array[$query]}" ]] && (( ! append_arr )); then
 		json_to_arr_array[$query]="$value"
 	else

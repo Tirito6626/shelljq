@@ -144,7 +144,7 @@ assert() {
         git diff --minimal --no-index --word-diff=color --word-diff-regex=. <(echo "$left") <(echo "$right")
         return 1
     else
-        (( with_log )) && echo "${_gray}+ assertion $1 == $2 ${_green}✓${_nc}"
+        (( log )) && echo "${_gray}+ assertion $1 == $2 ${_green}✓${_nc}"
     fi
     succeeded+=1
 }
@@ -173,7 +173,7 @@ assert_arr() {
         fi
     done
 
-    (( with_log )) && echo "${_gray}+ assertion $1[] == $2[] ${_green}✓${_nc}"
+    (( log )) && echo "${_gray}+ assertion $1[] == $2[] ${_green}✓${_nc}"
     succeeded+=1
 }
 
@@ -190,13 +190,29 @@ assert_arr() {
 }
 
 time_ms test_start
-with_log=1
+log=1
+
 # is_true
 test is_true true
 test is_true 1
 
 !test is_true false
 !test is_true 0
+
+# sanitize_string
+sanitize_string "test\"string"
+assert sanitized_string '"test\"string"'
+
+sanitize_string '"test string'
+assert sanitized_string '"\"test string"'
+
+# unwrap_string
+unwrap_string '"foo \" bar"'
+assert raw_string 'foo " bar'
+
+unwrap_string '"\"foo bar\""'
+assert raw_string '"foo bar"'
+
 # bool_to_int
 var="true"
 bool_to_int var
@@ -240,13 +256,13 @@ test typecheck '[]' array
 #!test typecheck '{"foo": {"bar"}}' object # todo
 !test typecheck '[test]' object
 set +x
-with_log=1 
+
 # json_trim
 for ((i=0; i<${#test_strings[@]}; i++)); do
     input="${test_strings[$i]}"
     output="${test_outputs[$i]}"
     if show_args="test_strings[$i]" test json_trim "$input" true true; then
-        with_log=1 assert json_trim_output output
+        log=1 assert json_trim_output output
     else
         echo "${_gray}test_strings[$i]: $input"
     fi
