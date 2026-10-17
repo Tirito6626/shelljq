@@ -64,27 +64,24 @@ _gray=$'\e[38;5;240m'
 _nc=$'\e[0m'
 }
 readonly SHELLJQ_VERSION='v1.0.0'
-num_regex='\[(-?[0-9])\]'
 
 readonly shjq_docs="<docs placeholder>"
 readonly shjq_help="<help placeholder>"
 # zsh-specific configuration
+num_regex='\[(-?[0-9]+)\]'
 if [[ "$ZSH_VERSION" ]]; then
 	is_zsh=1
 	emulate ksh
 	zmodload zsh/parameter
 	setopt bash_rematch
-	int_regex='^[-+]?[0-9]+\.?$'
 	[[ $ZSH_EVAL_CONTEXT =~ :file$ ]] && sourced=true || sourced=false
 	__unset_parent() { parent[-1]=(); parent_t[-1]=(); }; 
 	__unset_parent_index() { parent[-1]=(); parent_t[-1]=(); index[-1]=(); };
 	bool_to_int() { is_true "${(P)1:-false}"; eval "$1=$(( ! $? ))"; }
 	int_to_bool() case "${(P)1}" in 1|true) eval "$1=true" ;; *) eval "$1=false" ;; esac
-
 else
 	[[ "${BASH_VERSION[*]}" > "5 2 0" ]] && shopt -u patsub_replacement
-	is_zsh=false
-	int_regex='^-?(0|[1-9][0-9]*)(\.[0-9]+)?([eE][+-]?[0-9]+)?$|^-?\.[0-9]+([eE][+-]?[0-9]+)?$'
+	is_zsh=0
 	shopt -s extglob
 	(return 0 2>/dev/null) && sourced=true || sourced=false
 	__unset_parent() { unset 'parent[-1]' 'parent_t[-1]';  }; 
@@ -395,12 +392,10 @@ parse_object() {
 				value="$parsed_object"
 			fi
 			value="${value%% }"
-			set -x
 			if ! typecheck "$value"; then 
 				sanitize_string "$value"; 
 				value="$sanitized_string"
 			fi
-			set +x
 			data+=",\"${key}\":${value%% }"
 		done
 		parsed_object="{${data##,}}"
@@ -896,7 +891,7 @@ json_to_arr() {
 }
 
 json_query() {
-	### json_query <query(s)> <raw?> <sub?> -> json_query_output[]
+	### json_query <query(s)> <raw?> <sub?> <input?> -> json_query_output[]
 	## perform JSON query
 	## if $raw = true, double quotes are removed from the output (if the output is a string)
 	## if $sub = true, $input is omitted, otherwise $input is used as JSON input and converted into array
@@ -904,9 +899,9 @@ json_query() {
   	local raw="${2:-false}"
   	local sub="${3:-false}"
   	local result captured1 fullkey=''
-	local queries=("${1}")
+	local queries=(${1})
 	if ! is_true "$sub"; then
-		json_to_arr "$4"
+		json_to_arr "$4" 
 	fi
 	#json_trim "$json"
     if [[ -z "$queries" ]]; then
@@ -936,8 +931,7 @@ json_query() {
 						query="${query//\[/.{}" # key[0,1] -> key.{0,1]
 						query="${query//\]/\}}" # key{0,1] -> key.{0,1}
 						if [[ "$query" == *-1* ]]; then 
-							local last_el="${json_to_arr_array[${query//\.{*}]##* }"
-							#echo "$last_el"
+							local last_el="${json_to_arr_array[${fullkey}${query//\.*}]##* }"
 							query="${query//-1/${last_el}}"
 						fi
 						key="$query"
@@ -986,7 +980,7 @@ json_query() {
 							;;
 						*)
 						#echo "$key2_value"
-							is_true "$raw" && unwrap_string "$key2_value" && key2_value="$unwrapped_string"
+							is_true "$raw" && unwrap_string "$key2_value" && key2_value="$raw_string"
 							json_query_output+=("${key2_value}")
 					esac
 				done
@@ -1001,7 +995,7 @@ json_query() {
 					parse_array "${result//@a }" "$query"
 					result="$parsed_array"
 				else
-    				is_true "$raw" && unwrap_string "$result" && result="$unwrapped_string"
+					is_true "$raw" && unwrap_string "$result" && result="$raw_string"
 				fi
 				json_query_output+=("$result")
 			fi

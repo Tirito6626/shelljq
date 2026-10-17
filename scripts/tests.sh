@@ -279,10 +279,47 @@ sub=1 test key_to_arr key output_arr true test_array
 assert_arr output_arr  test_key_output
 sub=1 !test key_to_arr key "" true
 
-#json_to_arr
+# json_to_arr
 test_array[key2]="@a 0"
 test_array[key2.0]="@A foo"
 test_array[key2.0.foo]="bar"
 test json_to_arr "$arr_to_json_output" '' '' true
 assert_arr json_to_arr_array test_array
+
+# json_query
+test json_query 'foo' false true
+declare -p json_query_output
+assert json_query_output 'bar " baz'
+
+# json_query
+test json_query 'key' true true
+assert json_query_output '{"key1":"string test","key2":35.2,"key3":["another string","foo \" bar",null,{"foo":"bar"}]}'
+
+test json_query 'key.key1' true true
+assert json_query_output 'string test'
+
+test json_query 'key.key3' true true
+assert json_query_output '["another string","foo \" bar",null,{"foo":"bar"}]'
+
+query_output=(
+    "another string"
+    'foo " bar'
+    null
+    '{"foo":"bar"}'
+)
+test json_query 'key.key3[]' true true
+assert_arr json_query_output query_output
+
+test json_query 'key.key3[0]' true true
+assert json_query_output "${query_output[0]}"
+
+query_output=(
+    '{"foo":"bar"}'
+    'foo " bar'
+    null
+)
+test json_query 'key.key3[-1,1,2]' true true
+assert_arr json_query_output query_output
+
+!test json_query 'key.key2[]' true true
 _end

@@ -34,7 +34,7 @@ jobs:
         run: |
           bash scripts/tests.sh
   macos-test:
-    name: Rust tests on native macOS (zsh + bash 3.2)
+    name: Run tests on native macOS (zsh + bash 3.2)
     runs-on: macos-latest
     steps:
       - name: Checkout
@@ -42,4 +42,5 @@ jobs:
       - name: Run tests
         working-directory: .
         run: |
+          bash scripts/tests.sh
           zsh scripts/tests.sh
