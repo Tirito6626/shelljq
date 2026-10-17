@@ -168,10 +168,12 @@ typecheck() {
 			#set +x
 			;;
 		2|int)
-			if (( ! is_zsh )); then 
+			if (( ! is_zsh )); then
 				printf "%f" "$value" >/dev/null 2>&1 || return
-			else 
-				(( "$value" == "$value" )) 2>/dev/null || return 1
+			else
+				[[ "$value" == 0 ]] && return 0
+				(( "$value" == 0 )) 2>/dev/null
+				(( $? == 0 || $? == 2 )) && return 1
 			fi
 			;;
 		3|bool) case "$value" in true|false) return 0 ;; *) return 1 ;; esac ;;
@@ -364,7 +366,7 @@ parse_object() {
 			fi
 			value="${value%% }"
 			case "${value::1}" in 
-				'"')  value="${_green}${value}${_nc}"  ;;
+				'"') sanitize_string "$value"; value="${_green}${value}${_nc}" ;;
 				'{'|'[') : ;;
 				*)
 				case "$value" in
@@ -393,7 +395,12 @@ parse_object() {
 				value="$parsed_object"
 			fi
 			value="${value%% }"
-			typecheck "$value" || value="\"$value\""
+			set -x
+			if ! typecheck "$value"; then 
+				sanitize_string "$value"; 
+				value="$sanitized_string"
+			fi
+			set +x
 			data+=",\"${key}\":${value%% }"
 		done
 		parsed_object="{${data##,}}"
@@ -420,7 +427,7 @@ parse_array() {
 		fi
 		value="${value%% }"
 		case "${value::1}" in 
-			'"')  value="${_green}${value//\"/\\\"}${_nc}"  ;;
+			'"') sanitize_string "$value"; value="${_green}${value}${_nc}"  ;;
 			'{'|'[') : ;;
 			*)
 				case "$value" in
@@ -450,7 +457,10 @@ parse_array() {
 					value="$parsed_object"
 			fi
 			value="${value%% }"
-			typecheck "$value" || value="\"${value//\"/\\\"}\""
+			if ! typecheck "$value"; then 
+				sanitize_string "$value"; 
+				value="$sanitized_string"
+			fi
 			data+=",${value}"
 		done
     	parsed_array="[${data##,}]"
@@ -480,7 +490,7 @@ arr_to_json() {
 		unset json_to_arr_array[_shjq_arr]
 		for key in "${keys[@]}"; do
 			[[ "$key" == *'.'* ]] && continue
-			local value="${json_to_arr_array[$key]//\\/\\\\}"
+			local value="${json_to_arr_array[$key]}"
 			case "${value::3}" in
         		"@A ")
                 	if is_true "$pretty"; then
@@ -513,17 +523,10 @@ arr_to_json() {
 						esac
 						data+=$',\n'"${space}${value}"
 					else
-						set -x
-						case "$value" in
-								true|false \
-								| null     \
-								| '{'*'}'  \
-								| '['*']'  \
-								| '"'*'"') : ;;
-								'')  value='""'  ;;
-								*)	typecheck "$value" int || { sanitize_string "$value"; value="$sanitized_string"; } ;;
-						esac
-						set +x
+						if ! typecheck "$value"; then 
+							sanitize_string "$value"; 
+							value="$sanitized_string"
+						fi
 		        		data+=",${value}"
 					fi
         	esac
@@ -574,13 +577,10 @@ arr_to_json() {
 						esac
 						data+=$',\n'"${space}\"$key\": $value"
 					else
-						case "$value" in
-								true|false|null) : ;;
-								'{'*) typecheck "$value" object || return ;;
-								'['*) typecheck "$value" array ||  return ;;
-								'')  value='""'  ;;
-								*) typecheck "$value" int || { sanitize_string "$value"; value="$sanitized_string"; } ;;
-						esac
+						if ! typecheck "$value"; then 
+							sanitize_string "$value"; 
+							value="$sanitized_string"
+						fi
 						data+=",\"$key\":$value"
 					fi
         	esac
@@ -698,8 +698,8 @@ key_to_arr() {
 	local key="$1" arrname="$2" raw="${3:-false}" src_arr="${4:-json_to_arr_array}"
 	if (( is_zsh )); then
 		#echo "${${(P)arrname}[@]}"
-		[[ -z "${(Pk)arrname}" ]] && error "invalid or empty array" && return 1
-		[[ "$arrname" != json_to_arr_array ]] && typeset -gA json_to_arr_array=("${(kv)${(P)arrname}[@]}")
+		[[ "$src_arr" != json_to_arr_array ]] && typeset -gA json_to_arr_array=("${(kv)${(P)src_arr}[@]}")
+		[[ -z "${(k)json_to_arr_array[@]}" ]] && error "invalid or empty array" && return 1
 	else
 		[[ "$src_arr" != json_to_arr_array ]] && declare -n json_to_arr_array="$src_arr"
 		[[ -z "${json_to_arr_array[*]}" ]] && error "invalid or empty array" && return 1
@@ -1039,7 +1039,7 @@ json_set() {
 		sanitize_string "$value"
 		value="$sanitized_string"
 	fi
-	
+
 	if [[ "$parent" == "$query" || "${json_to_arr_array[$query]}" ]] && (( ! append_arr )); then
 		json_to_arr_array[$query]="$value"
 	else

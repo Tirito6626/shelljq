@@ -111,8 +111,9 @@ test() {
         echo "test '$1 ${args}' ${_green}✓${_nc} ${_gray}$((ms-start))ms${_nc}"
         succeeded+=1
     else
+        local code="$?"
         time_ms 
-        echo "test '${1} ${args}' ${_red}x${_nc} (\$? $? != 0) ${_gray}$((ms-start))ms${_nc}"
+        echo "test '${1} ${args}' ${_red}x${_nc} (\$? $code != 0) ${_gray}$((ms-start))ms${_nc}"
         [[ "$__shjq_error" ]] && echo "${_gray}> ${_red}$__shjq_error${_nc}"
         return 1
     fi
