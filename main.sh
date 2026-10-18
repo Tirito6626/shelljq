@@ -63,10 +63,10 @@ _bold=$'\e[1m'
 _gray=$'\e[38;5;240m'
 _nc=$'\e[0m'
 }
-readonly SHELLJQ_VERSION='v1.0.0'
+SHELLJQ_VERSION='v1.0.0-alpha'
 
-readonly shjq_docs="<docs placeholder>"
-readonly shjq_help="<help placeholder>"
+shjq_docs="<docs placeholder>"
+shjq_help="<help placeholder>"
 # zsh-specific configuration
 num_regex='\[(-?[0-9]+)\]'
 if [[ "$ZSH_VERSION" ]]; then
