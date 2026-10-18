@@ -1,5 +1,21 @@
 # shelljq
-bash 4.3+/zsh JSON processor
+bash 4.3+/zsh native JSON processor
+
+- no external commands needed
+- no subshells
+- one file
+- JSON validation and typechecking (as far as it goes in shell)
+
+# INSTALLATION
+the GitHub repository includes main.sh and shjq
+
+## main.sh
+the raw source file including the code, documentation, letfover comments and notes
+
+## shjq
+extra generated shell script with pregenerated help message, excluding documentation and comments
+
+depending on your need, you will most likely only need the 'shjq' file for the minimal file size, since the documentation is also generated into README
 
 # FORMAT
 shelljq uses own array format for storing multi-dimensional objects in two-dimensional array (indexed arrays are not supported).
@@ -95,7 +111,7 @@ if $prefix is supplied, it's prepended to each key name
 if $raw = true, all key string values are saved without the quoting
 if $return = true, declaration string of generated array is saved in `json_to_arr_output`
 
-# json_query `query(s)` `raw?` `sub?` -> json_query_output[]
+# json_query `query(s)` `raw?` `sub?` `input?` -> json_query_output[]
 perform JSON query
 if $raw = true, double quotes are removed from the output (if the output is a string)
 if $sub = true, $input is omitted, otherwise $input is used as JSON input and converted into array

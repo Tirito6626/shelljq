@@ -21,16 +21,13 @@ bash 4.3+/zsh native JSON processor
 - JSON validation and typechecking (as far as it goes in shell)
 
 # INSTALLATION
-the GitHub repository includes main.sh, shjq and shjq-full in 'Releases' tab
+the GitHub repository includes main.sh and shjq
 
-## main.sh 
+## main.sh
 the raw source file including the code, documentation, letfover comments and notes
 
 ## shjq
 extra generated shell script with pregenerated help message, excluding documentation and comments
-
-## shjq-full
-full script package including documentation and help message
 
 depending on your need, you will most likely only need the 'shjq' file for the minimal file size, since the documentation is also generated into README
 "

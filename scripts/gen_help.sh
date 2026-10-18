@@ -9,7 +9,7 @@ if [[ -f "$path" ]]; then
     rm "$path"
     #path="$path1"
     if [[ "$1" == 3 ]]; then
-        input=$(grep -v -e '	#' -e '###' -e '## [^}]' -e '^##$' -e '#- ' "$path1")
+        input=$(grep -v -e '	#' -e '###' -e '## ' -e '^##$' -e '#- ' "$path1")
     else
         input=$(grep -v '#- ' "$path1")
     fi

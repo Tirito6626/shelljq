@@ -1127,14 +1127,15 @@ __need_json() {
 
 
 __help_msg() {
+	code="${1:+1}"
 	{	
 		[[ "$1" ]] && echo "Invalid option: $1"
 		cat << EOF
-${FUNCNAME[1]:-$0} [input] [operation] [modifier]
+${FUNCNAME[1]:-$0} [input?] [operation] [operation] [modifier] ...
 EOF
 		echo -e "$shjq_help"
 	} >&2
-	exit "${1:+1}"
+	exit "${code:-0}"
 }
 
 
@@ -1152,7 +1153,8 @@ shjq() {
 	#set -x
 	#- 
 	#- input can be JSON or a file; if no input provided, shjq tries reading from STDIN with 1 second timeout, and exits if no data to read
-	#- 
+	#- operations can be chained directly; '--raw' only applies on the next operation(s) in order
+	#-
 	#set -x
 	if [[ -n "$1" && '{[' == *"${1::1}"* ]]; then
 		input="${1}"
@@ -1175,7 +1177,7 @@ shjq() {
 	else
 		#- informative:
 		case "$1" in
-			##- generate functions documentation based off the executable
+			##- show manpage-style documentation (if pregenerated with one)
 			("--docs")
 				__docs
 				return

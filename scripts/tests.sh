@@ -311,6 +311,13 @@ assert json_query_output '["another string","foo \" bar",null,{"foo":"bar"}]'
 
 query_output=(
     "another string"
+    35.2
+)
+test json_query 'key.key3[0] key.key2' true true
+assert_arr json_query_output query_output
+
+query_output=(
+    "another string"
     'foo " bar'
     null
     '{"foo":"bar"}'
