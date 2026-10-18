@@ -153,15 +153,23 @@ assert() {
 assert_arr() {
     [[ "$target" && "$target" != "$1" ]] && skipped+=1 && return
     tests+=1
+
     if (( is_zsh )); then
-        typeset -lA left_arr=("${(kv)${(P)1}[@]}")
-        typeset -lA right_arr=("${(kv)${(P)2}[@]}")
-		local keys=("${(k)${(P)arrname}[@]}")
+        if [[ "${(t)${(P)1}}" == association ]]; then
+            typeset -lA left_arr=("${(kv)${(P)1}[@]}")
+            typeset -lA right_arr=("${(kv)${(P)2}[@]}")
+		else
+            typeset -la left_arr=("${${(P)1}[@]}")
+            typeset -la right_arr=("${${(P)2}[@]}")
+        fi
+        local keys=()
+        printf -v keys "%s" {0..${#left_arr}}
 	else
 		declare -ln left_arr="$1"
         declare -ln right_arr="$2"
 		local keys=("${!left_arr[@]}")
 	fi
+
     for key in "${keys[@]}"; do
         local left="${left_arr[$key]}"
         local right="${right_arr[$key]}"
