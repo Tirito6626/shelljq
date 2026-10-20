@@ -63,7 +63,7 @@ _bold=$'\e[1m'
 _gray=$'\e[38;5;240m'
 _nc=$'\e[0m'
 }
-SHELLJQ_VERSION='v1.0.0-alpha'
+SHELLJQ_VERSION='v1.1.0-alpha'
 
 shjq_docs="<docs placeholder>"
 shjq_help="<help placeholder>"
