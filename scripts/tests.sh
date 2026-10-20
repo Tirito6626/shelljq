@@ -278,14 +278,21 @@ for ((i=0; i<${#test_strings[@]}; i++)); do
 done
 
 # arr_to_json
+declare -A test_json_array=( [0]="foo bar" [1]="@A hello" [1.hello]="world" [2]="false" [_shjq_arr]="1" )
+#["foo bar",{"hello":"world"},false]
+test arr_to_json test_json_array true
+assert "arr_to_json_output" '["foo bar",{"hello":"world"},false]'
+#echo "$arr_to_json_output"
+
 test arr_to_json test_array true
 assert "arr_to_json_output" "${test_outputs[-1]}"
 
 # key_to_arr
 declare -A output_arr
-sub=1 test key_to_arr key output_arr true test_array
+shjq_arr=test_array sub=1 test key_to_arr key output_arr true
 assert_arr output_arr  test_key_output
 sub=1 !test key_to_arr key "" true
+assert __shjq_error "invalid or empty array"
 
 # json_to_arr
 test_array[key2]="@a 0"
@@ -293,6 +300,15 @@ test_array[key2.0]="@A foo"
 test_array[key2.0.foo]="bar"
 test json_to_arr "$arr_to_json_output" '' '' true
 assert_arr json_to_arr_array test_array
+
+test json_to_arr "$arr_to_json_output" 'new_array' '' true
+assert_arr new_array test_array
+
+test json_to_arr '["foo bar",{"hello":"world"},false]' new_json_array '' true
+assert_arr new_json_array test_json_array
+
+sub=true !test json_to_arr '' '' true
+assert __shjq_error "no input provided"
 
 # json_query
 test json_query 'foo' false true
@@ -337,4 +353,44 @@ test json_query 'key.key3[-1,1,2]' true true
 assert_arr json_query_output query_output
 
 !test json_query 'key.key2[]' true true
+assert __shjq_error "key.key2 is not an array"
+
+test json_query 'key.key1' true true
+query_string_output="${json_query_output[0]}"
+
+shjq_arr=output_arr test json_query 'key1' true true
+assert query_string_output json_query_output
+
+shjq_arr=test !test json_query 'key.key1' true true
+assert __shjq_error "invalid or empty array"
+
+# json_set
+shjq_arr=test_array 
+test json_set 'key2[]' "foo bar" true
+assert "${test_array[key2]}" '@a 0 1'
+
+test json_set 'key2' "foo bar" true
+assert "${test_array[key2]}" '"foo bar"'
+
+!test json_set 'key[]' "foo bar" true
+assert __shjq_error "cannot append to object"
+
+!test json_set 'foo[]' "foo bar" true
+assert __shjq_error "cannot append to non-array"
+
+!test json_set 'foo.key' "foo bar" true
+assert __shjq_error "cannot add a key to non-object"
+
+shjq_arr=test !test json_set 'key.key' "test" true
+assert __shjq_error "invalid or empty array"
+
+test json_remove 'key.key3[-1]' true
+assert "${test_array[key.key3]}" '@a 0 1 2'
+
+test json_remove 'key.key3[1]' true
+assert "${test_array[key.key3]}" '@a 0 2'
+
+test json_remove 'key.key3' true
+assert "${test_array[key.key3]}" ''
+declare -p test_array output_arr
 _end

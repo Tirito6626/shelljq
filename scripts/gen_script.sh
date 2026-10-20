@@ -1,5 +1,6 @@
-path="$(dirname "$0")"
-path="${path//$0}/../shjq"
+dir="$(dirname "$0")"
+dir="${dir//$0}"
+path="$dir/../shjq"
 path1="${path/shjq/main.sh}"
 if [[ -f "$path" ]]; then
     if [[ ! -f "$path1" ]]; then 
@@ -8,11 +9,11 @@ if [[ -f "$path" ]]; then
     fi
     rm "$path"
     #path="$path1"
-    if [[ "$1" == 3 ]]; then
-        input=$(grep -v -e '	#' -e '###' -e '## ' -e '^##$' -e '#- ' "$path1")
-    else
+    #if [[ "$1" == 3 ]]; then
+    #    input=$(grep -v -e '	#' -e '###' -e '	##' -e '^## ' -e '#- ' "$path1")
+    #else
         input=$(grep -v '#- ' "$path1")
-    fi
+    #fi
 else
     input=$(grep -v '#- ' "$path1")
 fi
@@ -31,7 +32,7 @@ output=$(awk '/##\- / {
 			gsub(/	/, "");
 			sub(/\(/, "");
 			sub(/\)/, "");
-			gsub(/\"/, "");
+			gsub(/"/, "");
 			gsub(/\|/, ", ");
 			split($0, opts, ", ")
 			if (4 in opts) {
@@ -54,9 +55,28 @@ output=$(awk '/##\- / {
 			print
 		}
 ' "${path1:-$path}")
+docs="# shelljq
+bash 4.3+/zsh native JSON processor
 
-if [[ "$1" ]]; then
-    echo "${input//<help placeholder>/${output//$/\\$}}" > "$path"
-else
-    echo "$output"
-fi
+- no external commands needed
+- no subshells
+- one file
+- JSON validation and typechecking (as far as it goes in shell)
+"
+while read line; do
+	orig_line="$line"
+	line="${line## }"
+    line="${line//</\`}"
+    line="${line//>/\`}"
+    line="${line//-\`/->}"
+	case "${line::3}" in
+        "## ") docs+="${line:3}"$'\n' ;;
+        "###") docs+=$'\n'"${line:2}"$'\n' ;;
+    esac
+done <<< "$input"
+input="${input//<help placeholder>/${output//$/\\$}}"
+
+echo "$docs" > "$dir/../README.md"
+
+echo "${input//<help placeholder>/${output//$/\\$}}" | grep -v -e '	#' -e '###' -e '	##' -e '^## ' -e '#- ' > "$path"
+bash -n "$path"
