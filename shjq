@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # shjq: shell JSON query processor
 #
-# Credits: Tirito6626, 2025-2026
+# Credits: Tirito6626, 2026
 # License: Apache License 2.0
 #
 
@@ -41,6 +41,8 @@ modifiers:
   -c, --compact               compact output. disables '--pretty'"
 # zsh-specific configuration
 num_regex='\[(-?[0-9]+)\]'
+
+
 if [[ "$ZSH_VERSION" ]]; then
 	is_zsh=1
 	emulate ksh
@@ -62,7 +64,6 @@ else
 
 	int_to_bool() case "${!1}" in 1|true) eval "$1=true" ;; *) eval "$1=false" ;; esac
 fi
-
 
 read_until_v2() {
 	local e line="$2" char='' delim lline="${#2}"
@@ -302,43 +303,20 @@ parse_object() {
     [[ "$2" ]] && local parent="$2."
     [[ "$3" ]] && local pretty=true && local space="$4" || local pretty=false
 	IFS=$' \t\n'
-    if is_true "$pretty"; then
-    	for key in "${keys[@]}"; do
-        	local value="${json_to_arr_array[${parent}${key}]}"
-        	case "${value::3}" in
-				'@a ') parse_array "${value//@a }" "${parent}${key}" true "$space  "; value="$parsed_array" ;;
-				'@A ') parse_object "${value//@A }" "${parent}${key}" true "$space  "; value="$parsed_object" ;;
-			esac
-			value="${value%% }"
-			case "${value}" in 
-				'"'*) sanitize_string "$value"; value="${_green}${value}${_nc}" ;;
-				'{'*|'['*) : ;;
-				true|false) value=$'\e[38;2;84;150;210m'"$value${_nc}" ;;
-				null) value="${_gray}null${_nc}" ;;
-				*)
-					typecheck "$value" int || { error "invalid key value: $value (while parsing ${parent}${key})"; return 1; }
-					value="${_yellow}${value}${_nc}"
-					;;
-			esac
-			data+=$',\n'"${space}\"${key}\": ${value%% }"
-		done
-		parsed_object="{${data##,}"$'\n'"${space}}"
-    else
-		for key in "${keys[@]}"; do
-			local value="${json_to_arr_array[${parent}${key}]}"
-        	case "${value::3}" in
-				'@a ') parse_array "${value//@a }" "${parent}${key}"; value="$parsed_array" ;;
-				'@A ') parse_object "${value//@A }" "${parent}${key}"; value="$parsed_object" ;;
-			esac
-			value="${value%% }"
-			if ! typecheck "$value"; then 
-				sanitize_string "$value"; 
-				value="$sanitized_string"
-			fi
-			data+=",\"${key}\":${value%% }"
-		done
-		parsed_object="{${data##,}}"
-	fi
+	for key in "${keys[@]}"; do
+		local value="${json_to_arr_array[${parent}${key}]}"
+        case "${value::3}" in
+			'@a ') parse_array "${value//@a }" "${parent}${key}"; value="$parsed_array" ;;
+			'@A ') parse_object "${value//@A }" "${parent}${key}"; value="$parsed_object" ;;
+		esac
+		value="${value%% }"
+		if ! typecheck "$value"; then 
+			sanitize_string "$value"; 
+			value="$sanitized_string"
+		fi
+		data+=",\"${key}\":${value%% }"
+	done
+	parsed_object="{${data##,}}"
 }
 
 parse_array() {
@@ -348,49 +326,24 @@ parse_array() {
 	fi
     local data=''
     [[ "$2" ]] && local parent="$2."
-	[[ "$3" ]] && local pretty=true && local space="$4" || local pretty=false
     IFS=$' \t\n'
     local keys=($1) key
-	if is_true "$pretty"; then
-    	for key in "${keys[@]}"; do
-       		[[ "$key" == *'.'* ]] && continue
-    		local value="${json_to_arr_array[${parent}$key]}"
-        	case "${value::3}" in
-				'@a ') parse_array "${value//@a }" "${parent}${key}" true "$space  "; value="$parsed_array" ;;
-				'@A ') parse_object "${value//@A }" "${parent}${key}" true "$space  "; value="$parsed_object" ;;
-			esac
-			value="${value%% }"
-			case "${value}" in 
-				'"'*) sanitize_string "$value"; value="${_green}${value}${_nc}" ;;
-				'{'*|'['*) : ;;
-				true|false) value=$'\e[38;2;84;150;210m'"$value${_nc}" ;;
-				null) value="${_gray}null${_nc}" ;;
-				*)
-					typecheck "$value" int || { error "invalid key value: $value (while parsing ${parent}${key})"; return 1; }
-					value="${_yellow}${value}${_nc}"
-					;;
-			esac
-			data+=$',\n'"${space}${value}"
-		done
-		parsed_array="[${data##,}"$'\n'"${space}]"
-    else
-		for key in "${keys[@]}"; do
-        	[[ "$key" == *'.'* ]] && continue
-    		local value="${json_to_arr_array[${parent}$key]}"
-        	case "${value::3}" in
-				'@a ') parse_array "${value//@a }" "${parent}${key}"; value="$parsed_array" ;;
-				'@A ') parse_object "${value//@A }" "${parent}${key}"; value="$parsed_object" ;;
-			esac
-			value="${value%% }"
-			if ! typecheck "$value"; then 
-				sanitize_string "$value"; 
-				value="$sanitized_string"
-			fi
-			data+=",${value}"
-		done
-		data="${data%%\,}"
-    	parsed_array="[${data##,}]"
-	fi
+	for key in "${keys[@]}"; do
+        [[ "$key" == *'.'* ]] && continue
+    	local value="${json_to_arr_array[${parent}$key]}"
+        case "${value::3}" in
+			'@a ') parse_array "${value//@a }" "${parent}${key}"; value="$parsed_array" ;;
+			'@A ') parse_object "${value//@A }" "${parent}${key}"; value="$parsed_object" ;;
+		esac
+		value="${value%% }"
+		if ! typecheck "$value"; then 
+			sanitize_string "$value"; 
+			value="$sanitized_string"
+		fi
+		data+=",${value}"
+	done
+	data="${data%%\,}"
+    parsed_array="[${data##,}]"
 }
 
 arr_to_json() {
@@ -398,20 +351,21 @@ arr_to_json() {
   	local data=''
 	local arrname="$1"
   	local sub="${2:-false}"
-	local pretty="${3:-false}" keys=() key=''
-	is_true "$pretty" && space='  '
+	local keys=() key=''
 	if (( is_zsh )); then
 		[[ "$arrname" != json_to_arr_array ]] && typeset -gA json_to_arr_array=("${(kv)${(P)arrname}[@]}")
 		for key in "${(k)json_to_arr_array[@]}"; do
 			[[ "$key" == *\.*  || "$key" == "_shjq_arr" ]] && continue
 			keys+=("$key")
 		done
+		[[ "${#keys[@]}" == 0 ]] && echo "empty array" && return 1
 	else
 		[[ "$arrname" != json_to_arr_array ]] && declare -n json_to_arr_array="$arrname"
 		for key in "${!json_to_arr_array[@]}"; do
 			[[ "$key" == *\.* || "$key" == "_shjq_arr" ]] && continue
 			keys+=("$key")
 		done
+		[[ "${#keys[@]}" == 0 ]] && echo "empty array" && return 1
 	fi
 	if [[ "${json_to_arr_array[_shjq_arr]}" == 1 ]]; then
 		local len="${#keys[@]}" _keys=''
@@ -515,14 +469,15 @@ function profiler {
 }
 
 key_to_arr() {
-	local key="$1" arrname="$2" raw="${3:-false}" src_arr="${4:-json_to_arr_array}"
-	if (( is_zsh )); then
-		[[ "$src_arr" != json_to_arr_array ]] && typeset -gA json_to_arr_array=("${(kv)${(P)src_arr}[@]}")
-		[[ -z "${(k)json_to_arr_array[@]}" ]] && error "invalid or empty array" && return 1
-	else
-		[[ "$src_arr" != json_to_arr_array ]] && declare -n json_to_arr_array="$src_arr"
-		[[ -z "${json_to_arr_array[*]}" ]] && error "invalid or empty array" && return 1
+	local key="$1" arrname="$2" raw="${3:-false}"
+
+	if [[ "$shjq_arr" && "$shjq_arr" != json_to_arr_array ]]; then
+		declare -p "$shjq_arr" >/dev/null 2>&1 || { error "invalid or empty array"; return 1; }
+		(( ! is_zsh )) && declare -n json_to_arr_array="$shjq_arr" || typeset -gA json_to_arr_array=("${(kv)${(P)shjq_arr}[@]}");
 	fi
+
+	[[ -z "${json_to_arr_array[*]}" ]] && error "invalid or empty array" && return 1
+
 	if [[ "$key" == *'.'* ]]; then
 		key="${key%%\.}"
 		read parent key <<< "$key"
@@ -697,10 +652,7 @@ json_to_arr() {
     done
 	unset IFS
     IFS="$ifs"
-	if is_true "$return"; then
-		json_to_arr_output=$(declare -p json_to_arr_array)
-		[[ "$arrname" ]] && json_to_arr_output="${json_to_arr_output/json_to_arr_array/$arrname}"
-	fi
+
 	if (( is_zsh )) && [[ "$arrname" ]]; then
 		eval "typeset -gA ${arrname}=(\"\${(kv)json_to_arr_array[@]}\")"
 	fi
@@ -721,6 +673,8 @@ json_query() {
 		declare -p "$shjq_arr" >/dev/null 2>&1 || { error "invalid or empty array"; return 1; }
 		(( ! is_zsh )) && declare -n json_to_arr_array="$shjq_arr" || typeset -gA json_to_arr_array=("${(kv)${(P)shjq_arr}[@]}");
 	fi
+
+	[[ -z "${json_to_arr_array[*]}" ]] && error "invalid or empty array" && return 1
     if [[ -z "$queries" ]]; then
 		result="${input:-$4}"
 	else
@@ -854,7 +808,6 @@ json_set() {
 }
 
 json_remove() {
-	
 	if [[ "$shjq_arr" && "$shjq_arr" != json_to_arr_array ]]; then
 		declare -p "$shjq_arr" >/dev/null 2>&1 || { error "invalid or empty array"; return 1; }
 		(( ! is_zsh )) && declare -n json_to_arr_array="$shjq_arr" || typeset -gA json_to_arr_array=("${(kv)${(P)shjq_arr}[@]}");

@@ -289,7 +289,7 @@ assert "arr_to_json_output" "${test_outputs[-1]}"
 
 # key_to_arr
 declare -A output_arr
-sub=1 test key_to_arr key output_arr true test_array
+shjq_arr=test_array sub=1 test key_to_arr key output_arr true
 assert_arr output_arr  test_key_output
 sub=1 !test key_to_arr key "" true
 assert __shjq_error "invalid or empty array"
