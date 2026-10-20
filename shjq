@@ -15,7 +15,7 @@ _bold=$'\e[1m'
 _gray=$'\e[38;5;240m'
 _nc=$'\e[0m'
 }
-SHELLJQ_VERSION='v1.0.0-alpha'
+SHELLJQ_VERSION='v1.1.0-alpha'
 
 shjq_docs="<docs placeholder>"
 shjq_help="
@@ -783,7 +783,7 @@ json_set() {
 		case "${json_to_arr_array[$parent]::2}" in
 		"@a")
 			local index="${json_to_arr_array[$parent]##* }"
-			((index++))
+			((++index))
 			json_to_arr_array[$parent]+=" $index"
 			json_to_arr_array[$parent.$index]="$value"
 			;;
@@ -798,8 +798,8 @@ json_set() {
 		esac
 	fi
 
-	if (( is_zsh )) && [[ "$arrname" ]]; then
-		eval "typeset -gA ${arrname}=(\"\${(kv)json_to_arr_array[@]}\")"
+	if (( is_zsh )) && [[ "$shjq_arr" ]]; then
+		eval "typeset -gA ${shjq_arr}=(\"\${(kv)json_to_arr_array[@]}\")"
 	fi
 	if ! is_true "$sub"; then
 		arr_to_json json_to_arr_array true
@@ -836,6 +836,10 @@ json_remove() {
 		fi
 	else
 		unset json_to_arr_array[${query}]
+	fi
+
+	if (( is_zsh )) && [[ "$shjq_arr" ]]; then
+		eval "typeset -gA ${shjq_arr}=(\"\${(kv)json_to_arr_array[@]}\")"
 	fi
 
 	if ! is_true "$sub"; then
