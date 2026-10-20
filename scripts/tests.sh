@@ -133,6 +133,7 @@ test() {
         echo "test ! '$1 $args' ${_green}✓${_nc} ${_gray}$((ms-start))ms${_nc}"
         succeeded+=1
     fi
+    show_args=''
 }
 
 assert() {
@@ -291,9 +292,9 @@ assert "arr_to_json_output" "${test_outputs[-1]}"
 declare -A output_arr
 shjq_arr=test_array sub=1 test key_to_arr key output_arr true
 assert_arr output_arr  test_key_output
-sub=1 !test key_to_arr key "" true
+shjq_arr='invalidarr' sub=1 !test key_to_arr key true
 assert __shjq_error "invalid or empty array"
-
+shjq_arr=test_array
 # json_to_arr
 test_array[key2]="@a 0"
 test_array[key2.0]="@A foo"
@@ -358,15 +359,20 @@ assert __shjq_error "key.key2 is not an array"
 test json_query 'key.key1' true true
 query_string_output="${json_query_output[0]}"
 
-shjq_arr=output_arr test json_query 'key1' true true
+shjq_arr=output_arr 
+test json_query 'key1' true true
 assert query_string_output json_query_output
 
-shjq_arr=test !test json_query 'key.key1' true true
+shjq_arr=test 
+!test json_query 'key.key1' true true
 assert __shjq_error "invalid or empty array"
 
 # json_set
-shjq_arr=test_array 
+shjq_arr=test_array
+
 test json_set 'key2[]' "foo bar" true
+
+declare -p test_array
 assert "${test_array[key2]}" '@a 0 1'
 
 test json_set 'key2' "foo bar" true
@@ -381,8 +387,10 @@ assert __shjq_error "cannot append to non-array"
 !test json_set 'foo.key' "foo bar" true
 assert __shjq_error "cannot add a key to non-object"
 
-shjq_arr=test !test json_set 'key.key' "test" true
+shjq_arr=test 
+!test json_set 'key.key' "test" true
 assert __shjq_error "invalid or empty array"
+shjq_arr=test_array
 
 test json_remove 'key.key3[-1]' true
 assert "${test_array[key.key3]}" '@a 0 1 2'
@@ -392,5 +400,5 @@ assert "${test_array[key.key3]}" '@a 0 2'
 
 test json_remove 'key.key3' true
 assert "${test_array[key.key3]}" ''
-declare -p test_array output_arr
+#declare -p test_array output_arr
 _end
