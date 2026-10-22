@@ -480,20 +480,17 @@ key_to_arr() {
 
 	_parse_query
 	key="$query"
-
-	if [[ "$key" == *'.'* ]]; then
-		key="${key%%\.}"
-		read parent key <<< "$key"
-	fi
+	local keys="${json_to_arr_array[$key]:2}"
+	
 	case "${json_to_arr_array[$key]::2}" in
 		'@a')
-			parse_array "$key" "$parent"
-			parsed_array="${parsed_array//\"$key\":}"
+			parse_array "$keys" "$key"
+			parsed_array="${parsed_array//\"$key1\":}"
 			json_to_arr "${parsed_array}" "$arrname" "$raw"
 			;;
 		'@A')
-			parse_object "$key" "$parent"
-			parsed_object="${parsed_object//\"$key\":}"
+			parse_object "$keys" "$key"
+			parsed_object="${parsed_object//\"$key1\":}"
 			json_to_arr "${parsed_object}" "$arrname" "$raw"
 			;;
 		'') error "cannot convert non-object or array to array"; return 1 ;;
