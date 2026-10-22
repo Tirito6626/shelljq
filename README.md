@@ -78,9 +78,11 @@ trim JSON
 
 # parse_object `key name(s)` `parent_key` -> parsed_object
 build JSON object from its keys
+- if `$shjq_arr` variable is set, its value is used as input array
 
 # parse_array `key(s)` `parent_key?` -> parsed_array
 build JSON array from key names
+- if `$shjq_arr` variable is set, its value is used as input array
 
 # arr_to_json `arr_name` `sub?` -> arr_to_json_output
 convert associative array into JSON
@@ -93,17 +95,18 @@ returns JSON input with highlight and indentation (pretty-print)
 # profiler
 used inside bash DEBUG trap, returns the execution time of each operation/command in μs
 
-# key_to_arr `key` `arr_name` `raw?` -> json_to_arr_array[] | `arr_name`[]
+# key_to_arr `key` `arr_name?` `raw?` -> json_to_arr_array[] | `arr_name`[]
 build a new array from a key object/array
+- if `arr_name` is supplied, its value is used as output array
 - `raw` is passed to `json_to_arr`
 - if `$shjq_arr` variable is set, its value is used as input array
 
-# json_to_arr `input` `arrname?` `prefix?` `raw?` -> json_to_arr_array[] | `name`[] | json_to_arr_output
-- if `arrname` is supplied, it's used as array reference (default is json_to_arr_array)
-  - if `arrname` is not a valid array, a new one is created instead
+# json_to_arr `input` `arr_name?` `raw?` -> json_to_arr_array[] | `arr_name`[] | json_to_arr_output
+- if `arr_name` is supplied, it's used as array reference (default is json_to_arr_array)
+  - if `arr_name` is not a valid array, a new one is created instead
 - if `raw` = true, all key string values are saved without the quoting
 
-# json_query `query(s)` `raw?` `sub?` `input?` -> json_query_output[]
+# json_query `query(s)` `raw?` `sub?` -> json_query_output[]
 perform JSON query
 if $raw = true, double quotes are removed from the output (if the output is a string)
 if $sub = true, $input is omitted, otherwise $input is used as JSON input and converted into array
