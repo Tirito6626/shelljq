@@ -21,24 +21,26 @@ shjq_docs="<docs placeholder>"
 shjq_help="
 input can be JSON or a file; if no input provided, shjq tries reading from STDIN with 1 second timeout, and exits if no data to read
 operations can be chained directly; '--raw' only applies on the next operation(s) in order
+
 informative:
-  --docs                      show manpage-style documentation (if pregenerated with one)
   -h, --help                  print this message
   -v, --version               print version
 convertion:
   -A, --to-arr, --to-array    convert JSON into associative array and generate its declaration string
 JSON operations (chained):
-  -rq, -q, --query [query]    perform a JSON query
+  -rq, -q, --query QUERY      perform a JSON query. for multi-query use space-separated list in quotes: \"key key2 key3 ...\"
   -t, --trim                  trim JSON
   -a, --append, -s, 
-  --set [key] [value]         modify JSON
+  --set KEY VALUE             modify JSON. if KEY includes '[]', the VALUE is appended to KEY array as new element instead of rewriting the value
   -r, --remove, -d, 
-  --delete [key]              remove JSON key/element
+  --delete KEY                remove JSON key/element. if index is specified, unset individual index instead
 modifiers:
-  -p, --pretty                pretty output (enabled by default) 
+  -p, --pretty                pretty output
   -r, --raw                   print raw output
-  -j, --join [delim?]         join multiple outputs in one line with \$delim
-  -c, --compact               compact output. disables '--pretty'"
+  -j, --join DELIM            join multiple outputs in one line with DELIM
+  -c, --compact               compact output. disables '--pretty'
+
+if no operation is specified, '--trim' is performed by default"
 # zsh-specific configuration
 num_regex='\[(-?[0-9]+)\]'
 
@@ -499,6 +501,9 @@ key_to_arr() {
 }
 
 json_to_arr() {
+		
+	[[ -z "${1::1}" ]] && error "no input provided" && return 1
+	[[ '{[' == *"${1::1}"* ]] || { error "expected '{' or '[', got '${json::1}' instead"; return 1; }
 
 	_parse_string() {
 		chars=''
@@ -514,12 +519,29 @@ json_to_arr() {
 	json_to_arr_output=''
   	local ifs="$IFS"
   	local IFS="."
-  	local parent=() parent_t=() json_keys=() index=()
 	local json="$1" arrname="$2" raw="${3:-false}"
 	local i line is_array=0 append_key key value depth result curr_index raw_value chars=''
-	
-	[[ -z "${json::1}" ]] && error "no input provided" && return 1
-	[[ '{[' == *"${json::1}"* ]] || { error "expected '{' or '[', got '${json::1}' instead"; return 1; }
+  	local json_keys=() index=()
+
+	if [[ "${pre_parent}" ]]; then
+		local parent=("${pre_parent[@]}") parent_t=("${pre_parent_t[@]}")
+		unset pre_parent pre_parent_t
+	else
+		local parent=() parent_t=()
+		if [[ "${json::1}" == '[' ]]; then 
+			json_to_arr_array[_shjq_arr]=1
+			is_array=1
+		fi
+	fi
+
+	if [[ "${json::1}" == '[' ]]; then 
+		index=(0)
+		json="${json#\[/,}"
+		json="${json%\]}"
+	else
+		json="${json#\{}"
+		json="${json%\}}"
+	fi
 
 	if (( is_zsh )); then
 		typeset -gA json_to_arr_array=()
@@ -530,16 +552,6 @@ json_to_arr() {
 		declare -gA json_to_arr_array=()
 	fi
 
-	if [[ "${json::1}" == '[' ]]; then 
-		json_to_arr_array[_shjq_arr]=1
-		index=(0)
-		is_array=1
-		json="${json#\[}"
-		json="${json%\]}"
-	else
-		json="${json#\{}"
-		json="${json%\}}"
-	fi
 
 	json="${json//\\/\\\\}"
 	json="${json//\{\}/%BRACES%}"
@@ -565,14 +577,12 @@ json_to_arr() {
 		[[ "${key::1}" || "$key" == '_shjq_arr' ]] || continue
 		key="${key# }"
 		key="${key%% }"
-		parent_prefix="${parent[*]:+${parent[*]}.}"
+		parent_prefix="${prefix:+$prefix.}${parent[*]:+${parent[*]}.}"
 		if [ -z "$value" ]; then
 			[[ ${#index[@]} > 0 ]] && curr_index="${index[-1]}"
 			if [[ ${#parent[@]} > 0 ]]; then
 				case "$key" in
-				']')
-                    __unset_parent_index;
-					;;
+				']') __unset_parent_index ;;
                 '{')
 					json_to_arr_array[${parent_prefix%%\.}]+=" ${curr_index}"
 					parent+=("${curr_index}")
@@ -637,7 +647,6 @@ json_to_arr() {
 							is_true "$raw" && unwrap_string "$value" && value="$raw_string" 
 						;;
 					esac
-
 					[[ ${#parent[@]} > 0 ]] && json_to_arr_array[${parent_prefix%%\.}]+=" $key"
 					json_to_arr_array[${parent_prefix}${key}]="$value"
             esac
@@ -773,18 +782,35 @@ json_set() {
 	fi
 
 	if [[ "$parent" == "$query" || "${json_to_arr_array[$query]}" ]] && (( ! append_arr )); then
-		json_to_arr_array[$query]="$value"
+		local type="${value::1}"
+		case "$type" in
+			'{'|'[') [[ "$type" == '[' ]] && json_to_arr_array[$query]='@a' || json_to_arr_array[$query]='@A'; local pre_parent=("$query") pre_parent_t=("$type"); json_to_arr "$value" "" true true ;;
+			*) json_to_arr_array[$query]="$value" ;;
+		esac
 	else
 		case "${json_to_arr_array[$parent]::2}" in
 		"@a")
 			local index="${json_to_arr_array[$parent]##* }"
 			((++index))
-			json_to_arr_array[$parent]+=" $index"
-			json_to_arr_array[$parent.$index]="$value"
+			case "${value::1}" in
+			'{') 
+				json_to_arr_array[$parent.$index]="@A"; local pre_parent=("$parent.$index") pre_parent_t=('{'); 
+				json_to_arr "$value" "" true true 
+				json_to_arr_array[$parent]+=" $index"
+				;;
+			'[') error "cannot append array inside another array"; return 1 ;;
+			*) 
+				json_to_arr_array[$parent]+=" $index"
+				json_to_arr_array[$parent.$index]="$value"
+		esac
 			;;
 		"@A")
 			(( append_arr )) && { error "cannot append to object"; return 1; }
-			json_to_arr_array[$query]="$value"
+			local type="${value::1}"
+			case "$type" in
+				'{'|'[') [[ "$type" == '[' ]] && json_to_arr_array[$query]='@a' || json_to_arr_array[$query]='@A'; local pre_parent=("$query") pre_parent_t=("$type"); json_to_arr "$value" "" true true ;;
+				*) json_to_arr_array[$query]="$value" ;;
+			esac
 			json_to_arr_array[$parent]+=" $key"
 			;;
 		*)
@@ -901,10 +927,6 @@ shjq() {
 		fi
 	else
 		case "$1" in
-			("--docs")
-				__docs
-				return
-				;;
 			("-h"|"--help")
 				__help_msg
 				return 

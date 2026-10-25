@@ -377,14 +377,28 @@ assert __shjq_error "invalid or empty array"
 
 # json_set
 shjq_arr=test_array
-
 test json_set 'key2[]' "foo bar" true
-
 assert "${test_array[key2]}" '@a 0 1'
+
+test json_set 'key2[]' '{ "bar": "baz" }' true
+assert "${test_array[key2]}" '@a 0 1 2'
+assert "${test_array[key2.2]}" "@A bar"
+assert "${test_array[key2.2.bar]}" 'baz'
 
 test json_set 'key2' "foo bar" true
 assert "${test_array[key2]}" '"foo bar"'
 
+test json_set 'key2' '{ "foo": "bar" }' true
+assert "${test_array[key2]}" "@A foo"
+
+test json_set 'key2.subkey' '{ "lorez": "ipsum" }' true
+assert "${test_array[key2]}" "@A foo subkey"
+assert "${test_array[key2.subkey]}" "@A lorez"
+
+test json_set 'key2.subkey2' '[1,2,3]' true
+assert "${test_array[key2]}" "@A foo subkey subkey2"
+assert "${test_array[key2.subkey2]}" "@a 0 1 2"
+declare -p test_array
 !test json_set 'key[]' "foo bar" true
 assert __shjq_error "cannot append to object"
 
