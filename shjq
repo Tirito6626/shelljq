@@ -547,7 +547,7 @@ json_to_arr() {
 	fi
 
 	if (( is_zsh )); then
-		declare -p json_to_arr_array >/dev/null 2>&1 || typeset -gA json_to_arr_array=()
+		[[ "${#json_to_arr_array[@]}" != 0 ]] || typeset -gA json_to_arr_array=()
 	elif [[ "${arrname}" ]]; then
 		declare -p "$arrname" >/dev/null 2>&1 || declare -gA "$arrname"
 		declare -n json_to_arr_array="$arrname"
@@ -790,7 +790,6 @@ json_set() {
 			'{'|'[') [[ "$type" == '[' ]] && json_to_arr_array[$query]='@a' || json_to_arr_array[$query]='@A'; local pre_parent=("$query") pre_parent_t=("$type"); json_to_arr "$value" "" true true ;;
 			*) json_to_arr_array[$query]="$value" ;;
 		esac
-		set +x
 	else
 		case "${json_to_arr_array[$parent]::2}" in
 		"@a")
@@ -798,9 +797,7 @@ json_set() {
 			((++index))
 			case "${value::1}" in
 			'{')
-				set -x
 				json_to_arr_array[$parent.$index]="@A"; local pre_parent=("$parent.$index") pre_parent_t=('{'); 
-				set +x
 				json_to_arr "$value" "" true true
 				declare -p json_to_arr_array
 				json_to_arr_array[$parent]+=" $index"

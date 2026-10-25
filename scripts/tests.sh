@@ -398,7 +398,7 @@ assert "${test_array[key2.subkey]}" "@A lorez"
 test json_set 'key2.subkey2' '[1,2,3]' true
 assert "${test_array[key2]}" "@A foo subkey subkey2"
 assert "${test_array[key2.subkey2]}" "@a 0 1 2"
-declare -p test_array
+#declare -p test_array
 !test json_set 'key[]' "foo bar" true
 assert __shjq_error "cannot append to object"
 

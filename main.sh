@@ -629,7 +629,7 @@ json_to_arr() {
 	fi
 
 	if (( is_zsh )); then
-		declare -p json_to_arr_array >/dev/null 2>&1 || typeset -gA json_to_arr_array=()
+		[[ "${#json_to_arr_array[@]}" != 0 ]] || typeset -gA json_to_arr_array=()
 	elif [[ "${arrname}" ]]; then
 		declare -p "$arrname" >/dev/null 2>&1 || declare -gA "$arrname"
 		declare -n json_to_arr_array="$arrname"
