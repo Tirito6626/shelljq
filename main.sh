@@ -620,7 +620,8 @@ json_to_arr() {
 
 	if [[ "${json::1}" == '[' ]]; then 
 		index=(0)
-		json="${json#\[/,}"
+		json="${json#\[}"
+		json=",${json}"
 		json="${json%\]}"
 	else
 		json="${json#\{}"
@@ -628,7 +629,7 @@ json_to_arr() {
 	fi
 
 	if (( is_zsh )); then
-		typeset -gA json_to_arr_array=()
+		declare -p json_to_arr_array >/dev/null 2>&1 || typeset -gA json_to_arr_array=()
 	elif [[ "${arrname}" ]]; then
 		declare -p "$arrname" >/dev/null 2>&1 || declare -gA "$arrname"
 		declare -n json_to_arr_array="$arrname"
@@ -909,9 +910,10 @@ json_set() {
 			local index="${json_to_arr_array[$parent]##* }"
 			((++index))
 			case "${value::1}" in
-			'{') 
+			'{')
 				json_to_arr_array[$parent.$index]="@A"; local pre_parent=("$parent.$index") pre_parent_t=('{'); 
-				json_to_arr "$value" "" true true 
+				json_to_arr "$value" "" true true
+				declare -p json_to_arr_array
 				json_to_arr_array[$parent]+=" $index"
 				;;
 			'[') error "cannot append array inside another array"; return 1 ;;

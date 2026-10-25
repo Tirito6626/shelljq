@@ -20,7 +20,9 @@ SHELLJQ_VERSION='v1.1.0-alpha'
 shjq_docs="<docs placeholder>"
 shjq_help="
 input can be JSON or a file; if no input provided, shjq tries reading from STDIN with 1 second timeout, and exits if no data to read
-operations can be chained directly; '--raw' only applies on the next operation(s) in order
+
+each operation is performed in consecutive order and its output becomes the input for the next operation
+'--raw' only applies on the next operation(s) in order
 
 informative:
   -h, --help                  print this message
@@ -536,7 +538,8 @@ json_to_arr() {
 
 	if [[ "${json::1}" == '[' ]]; then 
 		index=(0)
-		json="${json#\[/,}"
+		json="${json#\[}"
+		json=",${json}"
 		json="${json%\]}"
 	else
 		json="${json#\{}"
@@ -544,7 +547,7 @@ json_to_arr() {
 	fi
 
 	if (( is_zsh )); then
-		typeset -gA json_to_arr_array=()
+		declare -p json_to_arr_array >/dev/null 2>&1 || typeset -gA json_to_arr_array=()
 	elif [[ "${arrname}" ]]; then
 		declare -p "$arrname" >/dev/null 2>&1 || declare -gA "$arrname"
 		declare -n json_to_arr_array="$arrname"
@@ -787,15 +790,19 @@ json_set() {
 			'{'|'[') [[ "$type" == '[' ]] && json_to_arr_array[$query]='@a' || json_to_arr_array[$query]='@A'; local pre_parent=("$query") pre_parent_t=("$type"); json_to_arr "$value" "" true true ;;
 			*) json_to_arr_array[$query]="$value" ;;
 		esac
+		set +x
 	else
 		case "${json_to_arr_array[$parent]::2}" in
 		"@a")
 			local index="${json_to_arr_array[$parent]##* }"
 			((++index))
 			case "${value::1}" in
-			'{') 
+			'{')
+				set -x
 				json_to_arr_array[$parent.$index]="@A"; local pre_parent=("$parent.$index") pre_parent_t=('{'); 
-				json_to_arr "$value" "" true true 
+				set +x
+				json_to_arr "$value" "" true true
+				declare -p json_to_arr_array
 				json_to_arr_array[$parent]+=" $index"
 				;;
 			'[') error "cannot append array inside another array"; return 1 ;;
