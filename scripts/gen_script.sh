@@ -74,9 +74,11 @@ while read line; do
         "###") docs+=$'\n'"${line:2}"$'\n' ;;
     esac
 done <<< "$input"
+output="${output//\"/\\\"}"
 input="${input//<help placeholder>/${output//$/\\$}}"
 
 echo "$docs" > "$dir/../README.md"
 
 echo "${input//<help placeholder>/${output//$/\\$}}" | grep -v -e '	#' -e '###' -e '	##' -e '^## ' -e '#- ' > "$path"
 bash -n "$path"
+chmod +x "$path"

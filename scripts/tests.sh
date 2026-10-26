@@ -34,7 +34,7 @@ declare -gA test_array=(
     [key.key1]="string test"
     [key.key2]=35.2
     [key.key3]="@a 0 1 2 3"
-    [key.key3.0]="another string"
+    [key.key3.0]="another, string,works"
     [key.key3.1]="foo \" bar"
     [key.key3.2]=null
     [key.key3.3]="@A foo"
@@ -46,7 +46,7 @@ declare -A test_key_output=(
     [key3.3]="@A foo" 
     [key3.2]="null"
     [key3.1]="foo \" bar"
-    [key3.0]="another string"
+    [key3.0]="another, string,works"
     [key2]="35.2"
     [key3]="@a 0 1 2 3" 
     [key1]="string test" 
@@ -72,7 +72,7 @@ test_outputs=(
     '[{"foo":"bar baz"}]'
     '{"foo":"bar\"baz"}'
     '{"component":{"type":17,"accent_color":16777215,"spoiler":false,"components":[{"type":9,"accessory":{"type":11,"media":{"url":"https://tirito.de/assets/kcalb.webp","proxy_url":"https://tirito.de/assets/kcalb.webp"},"description":null,"spoiler":false},"components":[{"type":10,"content":"## grand _tirito_'\''s portfolio"}]},{"type":1,"components":[{"type":2,"style":5,"label":"Fiction","emoji":null,"disabled":false,"url":"https://github.com/FictionWeb/framework"},{"type":2,"style":5,"label":"Amber","emoji":null,"disabled":false,"url":"https://amber-lang.com"},{"type":2,"style":5,"label":"Wispbyte","emoji":null,"disabled":false,"url":"https://wispbyte.com"},{"type":2,"style":5,"label":"all projects","emoji":null,"disabled":false,"url":"https://github.com/Tirito6626"}]},"tets\"\", fine okl"]},"hello":"1 2 3"}'
-    '{"foo":"bar \" baz","key":{"key1":"string test","key2":35.2,"key3":["another string","foo \" bar",null,{"foo":"bar"}]},"key2":[{"foo":"bar"}]}'
+    '{"foo":"bar \" baz","key":{"key1":"string test","key2":35.2,"key3":["another, string,works","foo \" bar",null,{"foo":"bar"}]},"key2":[{"foo":"bar"}]}'
 )
 
 #long_output='{"component":{"type":17,"accent_color":16777215,"spoiler":false,"components":[{"type":9,"accessory":{"type":11,"media":{"url":"https://tirito.de/assets/kcalb.webp","proxy_url":"https://tirito.de/assets/kcalb.webp"},"description":null,"spoiler":false},"components":[{"type":10,"content":"## grand _tirito_'\''s portfolio"}]},{"type":1,"components":[{"type":2,"style":5,"label":"Fiction","emoji":null,"disabled":false,"url":"https://github.com/FictionWeb/framework"},{"type":2,"style":5,"label":"Amber","emoji":null,"disabled":false,"url":"https://amber-lang.com"},{"type":2,"style":5,"label":"Wispbyte","emoji":null,"disabled":false,"url":"https://wispbyte.com"},{"type":2,"style":5,"label":"all projects","emoji":null,"disabled":false,"url":"https://github.com/Tirito6626"}]},"tets\"\", fine okl"]},"hello":"1 2 3"}'
@@ -175,7 +175,7 @@ assert_arr() {
         local left="${left_arr[$key]}"
         local right="${right_arr[$key]}"
         if [[ "$left" != "$right" ]]; then
-            echo "assertion failed: $1[$key] == $2[$key]"
+            echo "${_red}assertion failed:${_nc} $1[$key] == $2[$key]"
             echo "'$left' != '$right'"
             declare -p "$1" 
             declare -p "$2"
@@ -193,7 +193,7 @@ assert_arr() {
     expand_or_string "$1" left
     expand_or_string "$2" right
     if [[ "$left" == "$right" ]]; then
-        echo "assertion failed: $1 == $2"
+        echo "${_red}assertion failed:${_nc} $1 == $2"
         return 1
     fi
     succeeded+=1
@@ -295,46 +295,54 @@ assert_arr output_arr  test_key_output
 shjq_arr='invalidarr' sub=1 !test key_to_arr key true
 assert __shjq_error "invalid or empty array"
 shjq_arr=test_array
+
 # json_to_arr
 test_array[key2]="@a 0"
 test_array[key2.0]="@A foo"
 test_array[key2.0.foo]="bar"
-test json_to_arr "$arr_to_json_output" '' '' true
+test json_to_arr "$arr_to_json_output" '' true
 assert_arr json_to_arr_array test_array
 
-test json_to_arr "$arr_to_json_output" 'new_array' '' true
+test json_to_arr "$arr_to_json_output" 'new_array' true
 assert_arr new_array test_array
 
-test json_to_arr '["foo bar",{"hello":"world"},false]' new_json_array '' true
+test json_to_arr '["foo bar",{"hello":"world"},false]' new_json_array true
 assert_arr new_json_array test_json_array
 
-sub=true !test json_to_arr '' '' true
+sub=true !test json_to_arr '' true
 assert __shjq_error "no input provided"
 
 # json_query
 test json_query 'foo' false true
-declare -p json_query_output
 assert json_query_output 'bar " baz'
 
-# json_query
 test json_query 'key' true true
-assert json_query_output '{"key1":"string test","key2":35.2,"key3":["another string","foo \" bar",null,{"foo":"bar"}]}'
+assert json_query_output '{"key1":"string test","key2":35.2,"key3":["another, string,works","foo \" bar",null,{"foo":"bar"}]}'
 
 test json_query 'key.key1' true true
 assert json_query_output 'string test'
 
 test json_query 'key.key3' true true
-assert json_query_output '["another string","foo \" bar",null,{"foo":"bar"}]'
+assert json_query_output '["another, string,works","foo \" bar",null,{"foo":"bar"}]'
+
+shjq_arr=new_json_array
+
+test json_query '[0]' true true
+assert json_query_output 'foo bar'
+
+test json_query '[1].hello' true true
+assert json_query_output 'world'
+shjq_arr=test_array
 
 query_output=(
-    "another string"
+    "another, string,works"
     35.2
 )
 test json_query 'key.key3[0] key.key2' true true
 assert_arr json_query_output query_output
 
 query_output=(
-    "another string"
+    "another, string,works"
     'foo " bar'
     null
     '{"foo":"bar"}'
@@ -369,15 +377,28 @@ assert __shjq_error "invalid or empty array"
 
 # json_set
 shjq_arr=test_array
-
 test json_set 'key2[]' "foo bar" true
-
-declare -p test_array
 assert "${test_array[key2]}" '@a 0 1'
+
+test json_set 'key2[]' '{ "bar": "baz" }' true
+assert "${test_array[key2]}" '@a 0 1 2'
+assert "${test_array[key2.2]}" "@A bar"
+assert "${test_array[key2.2.bar]}" 'baz'
 
 test json_set 'key2' "foo bar" true
 assert "${test_array[key2]}" '"foo bar"'
 
+test json_set 'key2' '{ "foo": "bar" }' true
+assert "${test_array[key2]}" "@A foo"
+
+test json_set 'key2.subkey' '{ "lorez": "ipsum" }' true
+assert "${test_array[key2]}" "@A foo subkey"
+assert "${test_array[key2.subkey]}" "@A lorez"
+
+test json_set 'key2.subkey2' '[1,2,3]' true
+assert "${test_array[key2]}" "@A foo subkey subkey2"
+assert "${test_array[key2.subkey2]}" "@a 0 1 2"
+#declare -p test_array
 !test json_set 'key[]' "foo bar" true
 assert __shjq_error "cannot append to object"
 
